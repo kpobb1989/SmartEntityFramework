@@ -94,7 +94,7 @@ namespace Sample.DB
             bool deleteUnmatch = true,
             CancellationToken ct = default)
         {
-            foreach (var entity in newEntities.Where(s => GetNavigationProperties(s.GetType()).Count > 0))
+            foreach (var entity in newEntities.Where(s => HasNavigationPropertiesWithValue(s)))
             {
                 throw new Exception("Navigation properties can not be synced up");
             }
@@ -167,9 +167,6 @@ namespace Sample.DB
             }
         }
 
-        private List<INavigation> GetNavigationProperties(Type type)
-            => dbContext.Model.FindEntityType(type)!.GetNavigations().ToList();
-
         private static Func<TEntity, object> CreateKeySelector()
         {
             var keyProperties = typeof(TEntity).GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(prop => Attribute.IsDefined(prop, typeof(KeyMemberAttribute))).ToArray();
@@ -215,6 +212,21 @@ namespace Sample.DB
             return propsTouUpdate.Count > 0;
         }
 
+        private List<INavigation> GetNavigationProperties(Type type)
+            => dbContext.Model.FindEntityType(type)!.GetNavigations().ToList();
+
+        private bool HasNavigationPropertiesWithValue(TEntity dbEntity)
+        {
+            var nagivationProperties = GetNavigationProperties(typeof(TEntity));
+
+            var props = dbEntity.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+            var hasValue = nagivationProperties.Join(props, nav => nav.Name, prop => prop.Name, (nav, prop) => prop.GetValue(dbEntity))
+                .Where(s => s != null);
+
+            return hasValue.Any();
+        }
+
         private IEnumerable<PropertyInfo> GetPrimitiveProperties(TEntity dbEntity)
         {
             var nagivationProperties = GetNavigationProperties(typeof(TEntity)).Select(s => s.Name);
@@ -223,6 +235,5 @@ namespace Sample.DB
 
             return primitiveProps;
         }
-
     }
 }

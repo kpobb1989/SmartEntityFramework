@@ -22,11 +22,12 @@ namespace Sample.Funcs
             {
                 Name = "Netflix",
                 Address = "121 Albright Way, Los Gatos, CA",
-                Employees = new List<EmployeeEntity>()
-                {
-                     new() { Email = "sportjoy@outlook.com", FirstName = "Vyasya1", LastName = "Pupkin" },
-                     new() { Email = "f0rever@i.ua", FirstName = "Alex", LastName = "Kushnir" }
-                }
+            };
+
+            var employees = new List<EmployeeEntity>()
+            {
+                new() { Email = "sportjoy@outlook.com", FirstName = "Vyasya1", LastName = "Pupkin" },
+                new() { Email = "f0rever@i.ua", FirstName = "Alex", LastName = "Kushnir" }
             };
 
             await unitOfWork.Entity<CompanyEntity>().SyncUpAsync(new[] { company, company2 }, ct: ct);
@@ -37,7 +38,7 @@ namespace Sample.Funcs
         //[Function("SampleSyncUp")]
         //public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get")] CancellationToken ct)
         //{
-            
+
         //}
     }
 }
