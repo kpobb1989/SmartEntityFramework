@@ -1,12 +1,15 @@
 ﻿using Sample.Abstractions.DB;
 using Sample.Abstractions.DB.Interfaces;
 
+using System.Diagnostics;
+
 namespace Sample.DB
 {
     public class UnitOfWork(SampleDbContext dbContext) : IUnitOfWork
     {
         private readonly Dictionary<Type, object> _repositories = [];
 
+        [DebuggerStepThrough]
         public IRepository<TEntity> Entity<TEntity>() where TEntity : DbEntity
         {
             var type = typeof(TEntity);
