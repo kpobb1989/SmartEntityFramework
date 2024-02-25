@@ -49,19 +49,19 @@ namespace Sample.Funcs
             {
                 Name = c.Name,
                 Address = c.Address,
-            });
+            }).ToList();
 
             await unitOfWork.Entity<CompanyEntity>().SyncUpAsync(dbCompanies, ct: ct);
 
             await unitOfWork.SaveChangesAsync(ct);
 
-            var dbEmployees = companies.SelectMany(c => c.Employees, (company, employee) => new EmployeeEntity
+            var dbEmployees = companies.SelectMany(c => c.Employees!, (company, employee) => new EmployeeEntity
             {
                 Email = employee.Email,
                 FirstName = employee.FirstName,
                 LastName = employee.LastName,
                 CompanyId = dbCompanies.First(c => c.Name == company.Name).Id,
-            });
+            }).ToList();
 
             await unitOfWork.Entity<EmployeeEntity>().SyncUpAsync(dbEmployees, ct: ct);
 

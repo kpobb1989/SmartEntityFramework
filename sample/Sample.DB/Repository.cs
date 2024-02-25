@@ -5,13 +5,25 @@ using Sample.Abstractions.Attributes;
 using Sample.Abstractions.DB;
 using Sample.Abstractions.DB.Interfaces;
 
+using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
 
 namespace Sample.DB
 {
-    public class Repository<TEntity>(SampleDbContext dbContext) : IRepository<TEntity> where TEntity : DbEntity
+    public class Repository<TEntity> : IRepository<TEntity> where TEntity : DbEntity
     {
+        private readonly SampleDbContext _dbContext;
+        private readonly DbSet<TEntity> _dbSet;
+
+        [DebuggerStepThrough]
+        public Repository(SampleDbContext dbContext)
+        {
+            _dbContext = dbContext;
+
+            _dbSet = _dbContext.Set<TEntity>();
+        }
+
         public async Task<TEntity?> FirstOrDefaultAsync(
             Expression<Func<TEntity, bool>>? filter = null,
             bool includeAll = false,
@@ -41,7 +53,7 @@ namespace Sample.DB
             Expression<Func<TEntity, object?[]>>? include = null,
             bool readOnly = true)
         {
-            IQueryable<TEntity> query = dbContext.Set<TEntity>();
+            IQueryable<TEntity> query = _dbSet;
 
             if (readOnly)
             {
@@ -135,19 +147,19 @@ namespace Sample.DB
         }
 
         public void Add(TEntity entity)
-            => dbContext.Set<TEntity>().Add(entity);
+            => _dbSet.Add(entity);
 
         public void Add(IEnumerable<TEntity> entities)
-            => dbContext.Set<TEntity>().AddRange(entities);
+            => _dbSet.AddRange(entities);
 
         public void Update(TEntity entity)
         {
-            if (dbContext.Entry(entity).State == EntityState.Detached)
+            if (_dbContext.Entry(entity).State == EntityState.Detached)
             {
-                dbContext.Set<TEntity>().Attach(entity);
+                _dbSet.Attach(entity);
             }
 
-            dbContext.Entry(entity).State = EntityState.Modified;
+            _dbContext.Entry(entity).State = EntityState.Modified;
         }
 
         public void Update(IEnumerable<TEntity> entities)
@@ -160,12 +172,12 @@ namespace Sample.DB
 
         public void Remove(TEntity entity)
         {
-            if (dbContext.Entry(entity).State == EntityState.Detached)
+            if (_dbContext.Entry(entity).State == EntityState.Detached)
             {
-                dbContext.Set<TEntity>().Attach(entity);
+                _dbSet.Attach(entity);
             }
 
-            dbContext.Set<TEntity>().Remove(entity);
+            _dbSet.Remove(entity);
         }
 
         public void Remove(IEnumerable<TEntity> entities)
@@ -222,7 +234,7 @@ namespace Sample.DB
         }
 
         private List<INavigation> GetNavigationProperties(Type type)
-            => dbContext.Model.FindEntityType(type)!.GetNavigations().ToList();
+            => _dbContext.Model.FindEntityType(type)!.GetNavigations().ToList();
 
         private bool HasNavigationPropertyWithValue(TEntity dbEntity)
         {
