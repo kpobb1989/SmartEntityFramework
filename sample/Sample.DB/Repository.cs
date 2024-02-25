@@ -20,7 +20,7 @@ namespace Sample.DB
             Expression<Func<TEntity, object?[]>>? include = null,
             bool asNoTracking = true,
             CancellationToken ct = default)
-         => await GetQueryable(filter, orderBy: null, includeAll, include, asNoTracking).FirstOrDefaultAsync(ct);
+            => await GetQueryable(filter, orderBy: null, includeAll, include, asNoTracking).FirstOrDefaultAsync(ct);
 
         public async Task<IEnumerable<TEntity>> ToListAsync(
             Expression<Func<TEntity, bool>>? filter = null,
@@ -29,7 +29,13 @@ namespace Sample.DB
             Expression<Func<TEntity, object?[]>>? include = null,
             bool asNoTracking = true,
             CancellationToken ct = default)
-         => await GetQueryable(filter, orderBy, includeAll, include, asNoTracking).ToListAsync(ct);
+            => await GetQueryable(filter, orderBy, includeAll, include, asNoTracking).ToListAsync(ct);
+
+        public async Task<long> CountAsync(
+            Expression<Func<TEntity, bool>>? filter = null,
+            CancellationToken ct = default)
+            => await GetQueryable(filter).LongCountAsync(ct);
+
         public IQueryable<TEntity> GetQueryable(
             Expression<Func<TEntity, bool>>? filter = null,
             Expression<Func<TEntity, object>>? orderBy = null,
@@ -118,17 +124,10 @@ namespace Sample.DB
         }
 
         public void Add(TEntity entity)
-        {
-            dbContext.Set<TEntity>().Add(entity);
-        }
+            => dbContext.Set<TEntity>().Add(entity);
 
         public void Add(IEnumerable<TEntity> entities)
-        {
-            foreach (TEntity entity in entities)
-            {
-                Add(entity);
-            }
-        }
+            => dbContext.Set<TEntity>().AddRange(entities);
 
         public void Update(TEntity entity)
         {
@@ -164,18 +163,6 @@ namespace Sample.DB
             {
                 Remove(entity);
             }
-        }
-
-        public async Task<long> CountAsync(Expression<Func<TEntity, bool>>? filter = null, CancellationToken ct = default)
-        {
-            IQueryable<TEntity> query = dbContext.Set<TEntity>();
-
-            if (filter != null)
-            {
-                query = query.Where(filter);
-            }
-
-            return await query.LongCountAsync(ct);
         }
 
         private IEnumerable<INavigation> GetNavigationProperties()
