@@ -18,18 +18,18 @@ namespace Sample.DB
             Expression<Func<TEntity, bool>>? filter = null,
             bool includeAll = false,
             Expression<Func<TEntity, object?[]>>? include = null,
-            bool asNoTracking = true,
+            bool readOnly = true,
             CancellationToken ct = default)
-            => await GetQueryable(filter, orderBy: null, includeAll, include, asNoTracking).FirstOrDefaultAsync(ct);
+            => await GetQueryable(filter, orderBy: null, includeAll, include, readOnly).FirstOrDefaultAsync(ct);
 
         public async Task<IEnumerable<TEntity>> ToListAsync(
             Expression<Func<TEntity, bool>>? filter = null,
             Expression<Func<TEntity, object>>? orderBy = null,
             bool includeAll = false,
             Expression<Func<TEntity, object?[]>>? include = null,
-            bool asNoTracking = true,
+            bool readOnly = true,
             CancellationToken ct = default)
-            => await GetQueryable(filter, orderBy, includeAll, include, asNoTracking).ToListAsync(ct);
+            => await GetQueryable(filter, orderBy, includeAll, include, readOnly).ToListAsync(ct);
 
         public async Task<long> CountAsync(
             Expression<Func<TEntity, bool>>? filter = null,
@@ -41,11 +41,11 @@ namespace Sample.DB
             Expression<Func<TEntity, object>>? orderBy = null,
             bool includeAll = false,
             Expression<Func<TEntity, object?[]>>? include = null,
-            bool asNoTracking = true)
+            bool readOnly = true)
         {
             IQueryable<TEntity> query = dbContext.Set<TEntity>();
 
-            if (asNoTracking)
+            if (readOnly)
             {
                 query = query.AsNoTracking();
             }
@@ -70,7 +70,7 @@ namespace Sample.DB
 
             if (include != null && include.Body is NewArrayExpression array)
             {
-                var inputProperties = array.Expressions
+                var includeProperties = array.Expressions
                     .Select(expression => expression as MemberExpression)
                     .Where(expression => expression != null)
                     .Select(expression => expression!.Member.Name)
@@ -80,7 +80,7 @@ namespace Sample.DB
                                             .Select(s => s.Name)
                                             .ToArray();
 
-                var entitiesToInclude = navigationProperties.Join(inputProperties, nav => nav, input => input, (nav, _) => nav);
+                var entitiesToInclude = navigationProperties.Join(includeProperties, nav => nav, input => input, (nav, _) => nav);
 
                 foreach (var entityName in entitiesToInclude)
                 {
