@@ -7,10 +7,10 @@ using Sample.Abstractions.DB.Interfaces;
 
 namespace Sample.Funcs
 {
-    public class Function1(IUnitOfWork unitOfWork)
+    public class SampleSyncUp(IUnitOfWork unitOfWork)
     {
 
-        [Function("Function1")]
+        [Function("SampleSyncUp")]
         public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get")] HttpRequest req)
         {
             var user = new UserEntity() { Email = "sportjoy@outlook.com", FirstName = "Vyasya", LastName = "Pupkin" };
