@@ -5,6 +5,9 @@ using Microsoft.Azure.Functions.Worker;
 using Sample.Abstractions.DB;
 using Sample.Abstractions.DB.Interfaces;
 
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace Sample.Funcs
 {
     public class SampleSyncUp(IUnitOfWork unitOfWork)
@@ -12,37 +15,71 @@ namespace Sample.Funcs
         [Function("SampleSyncUpTimerTrigger")]
         public async Task RunTimerTrigger([TimerTrigger("0 */5 * * * *", RunOnStartup = true)] CancellationToken ct)
         {
-            var company = new CompanyEntity()
+            var json = @"
+[
+    {
+        ""name"": ""Chevron"",
+        ""address"": ""6001 Bollinger Canyon Rd, Suite G, San Ramon, CA"",
+        ""employees"": [
             {
-                Name = "Chevron",
-                Address = "6001 Bollinger Canyon Rd, Suite G, San Ramon, CA"
-            };
-
-            var company2 = new CompanyEntity()
+                ""email"": ""vyasyapupkin@chevron.com"",
+                ""firstName"": ""Vyasya"",
+                ""lastName"": ""Pupkin""
+            },
             {
-                Name = "Netflix",
-                Address = "121 Albright Way, Los Gatos, CA",
-            };
+                ""email"": ""mattereza@chevron.com"",
+                ""firstName"": ""Mat"",
+                ""lastName"": ""Tereza""
+            }
+        ]
+    },
+    {
+        ""name"": ""Netflix"",
+        ""address"": ""121 Albright Way, Los Gatos, CA"",
+        ""employees"": []
+    }
+]";
 
-            var company3 = new CompanyEntity()
+            var companies = JsonSerializer.Deserialize<CompanyDto[]>(json, new JsonSerializerOptions()
             {
-                Name = "Meta",
-                Address = "1 Hacker Wy, Menlo Park, CA"
-            };
+                PropertyNameCaseInsensitive = true
+            }) ?? Enumerable.Empty<CompanyDto>();
 
-            await unitOfWork.Entity<CompanyEntity>().SyncUpAsync(new[] { company, company2, company3 }, ct: ct);
+            var dbCompanies = companies.Select(c => new CompanyEntity
+            {
+                Name = c.Name,
+                Address = c.Address,
+            });
+
+            await unitOfWork.Entity<CompanyEntity>().SyncUpAsync(dbCompanies, ct: ct);
 
             await unitOfWork.SaveChangesAsync(ct);
 
-            var employees = new List<EmployeeEntity>()
+            var dbEmployees = companies.SelectMany(c => c.Employees, (company, employee) => new EmployeeEntity
             {
-                new() { Email = "sportjoy@outlook.com", FirstName = "Vyasya1", LastName = "Pupkin", CompanyId = company3.Id },
-                new() { Email = "f0rever@i.ua", FirstName = "Alex", LastName = "Kushnir", CompanyId = company3.Id }
-            };
+                Email = employee.Email,
+                FirstName = employee.FirstName,
+                LastName = employee.LastName,
+                CompanyId = dbCompanies.First(c => c.Name == company.Name).Id,
+            });
 
-            await unitOfWork.Entity<EmployeeEntity>().SyncUpAsync(employees, ct: ct);
+            await unitOfWork.Entity<EmployeeEntity>().SyncUpAsync(dbEmployees, ct: ct);
 
             await unitOfWork.SaveChangesAsync(ct);
+        }
+
+        public record CompanyDto
+        {
+            public string? Name { get; set; }
+            public string? Address { get; set; }
+            public EmployeeDto[]? Employees { get; set; } = [];
+        }
+
+        public record EmployeeDto
+        {
+            public string? Email { get; set; }
+            public string? FirstName { get; set; }
+            public string? LastName { get; set; }
         }
 
         //[Function("SampleSyncUp")]
