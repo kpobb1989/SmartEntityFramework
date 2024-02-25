@@ -1,18 +1,14 @@
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Sample.Abstractions.DB.Interfaces;
 
 using Sample.Abstractions;
 using Sample.DB;
+using Microsoft.Extensions.Configuration;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
-    .ConfigureAppConfiguration(config =>
-    {
-        AppSettings.Setup(config.Build());
-    })
     .ConfigureServices(services =>
     {
         services.AddApplicationInsightsTelemetryWorkerService();
@@ -23,5 +19,9 @@ var host = new HostBuilder()
         services.AddScoped<IUnitOfWork, UnitOfWork>();
     })
     .Build();
+
+var configuration = host.Services.GetRequiredService<IConfiguration>();
+
+AppSettings.Setup(configuration);
 
 host.Run();

@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Extensions.Logging;
 
 using Sample.Abstractions.DB;
 using Sample.Abstractions.DB.Interfaces;
