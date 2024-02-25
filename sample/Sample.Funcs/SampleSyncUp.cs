@@ -24,13 +24,23 @@ namespace Sample.Funcs
                 Address = "121 Albright Way, Los Gatos, CA",
             };
 
-            var employees = new List<EmployeeEntity>()
+            var company3 = new CompanyEntity()
             {
-                new() { Email = "sportjoy@outlook.com", FirstName = "Vyasya1", LastName = "Pupkin" },
-                new() { Email = "f0rever@i.ua", FirstName = "Alex", LastName = "Kushnir" }
+                Name = "Meta",
+                Address = "1 Hacker Wy, Menlo Park, CA"
             };
 
-            await unitOfWork.Entity<CompanyEntity>().SyncUpAsync(new[] { company, company2 }, ct: ct);
+            await unitOfWork.Entity<CompanyEntity>().SyncUpAsync(new[] { company, company2, company3 }, ct: ct);
+
+            await unitOfWork.SaveChangesAsync(ct);
+
+            var employees = new List<EmployeeEntity>()
+            {
+                new() { Email = "sportjoy@outlook.com", FirstName = "Vyasya1", LastName = "Pupkin", CompanyId = company3.Id },
+                new() { Email = "f0rever@i.ua", FirstName = "Alex", LastName = "Kushnir", CompanyId = company3.Id }
+            };
+
+            await unitOfWork.Entity<EmployeeEntity>().SyncUpAsync(employees, ct: ct);
 
             await unitOfWork.SaveChangesAsync(ct);
         }

@@ -94,7 +94,7 @@ namespace Sample.DB
             bool deleteUnmatch = true,
             CancellationToken ct = default)
         {
-            foreach (var entity in newEntities.Where(s => HasNavigationPropertiesWithValue(s)))
+            if (newEntities.Where(entity => HasNavigationPropertyWithValue(entity)).Any())
             {
                 throw new Exception("Navigation properties can not be synced up");
             }
@@ -123,6 +123,15 @@ namespace Sample.DB
 
                 Remove(entitiesToDelete);
             }
+
+            // Append Ids
+            dbEntities = await ToListAsync(ct: ct);
+            newEntities.Join(dbEntities, keySelector, keySelector, (newEntity, dbEntity) => new { NewEntity = newEntity, DbEntity = dbEntity })
+                .ToList()
+                .ForEach(group =>
+                {
+                    group.NewEntity.Id = group.DbEntity.Id;
+                });
         }
 
         public void Add(TEntity entity)
@@ -215,7 +224,7 @@ namespace Sample.DB
         private List<INavigation> GetNavigationProperties(Type type)
             => dbContext.Model.FindEntityType(type)!.GetNavigations().ToList();
 
-        private bool HasNavigationPropertiesWithValue(TEntity dbEntity)
+        private bool HasNavigationPropertyWithValue(TEntity dbEntity)
         {
             var nagivationProperties = GetNavigationProperties(typeof(TEntity));
 
