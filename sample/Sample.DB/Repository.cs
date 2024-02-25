@@ -6,6 +6,7 @@ using Sample.Abstractions.DB;
 using Sample.Abstractions.DB.Interfaces;
 
 using System.Linq.Expressions;
+using System.Reflection;
 
 using static Sample.Abstractions.DB.DbEntity;
 
@@ -29,7 +30,6 @@ namespace Sample.DB
             bool asNoTracking = true,
             CancellationToken ct = default)
          => await GetQueryable(filter, orderBy, includeAll, include, asNoTracking).ToListAsync(ct);
-
         public IQueryable<TEntity> GetQueryable(
             Expression<Func<TEntity, bool>>? filter = null,
             Expression<Func<TEntity, object>>? orderBy = null,
@@ -183,7 +183,7 @@ namespace Sample.DB
 
         private static Func<TEntity, object> CreateKeySelector()
         {
-            var keyProperties = typeof(TEntity).GetProperties().Where(prop => Attribute.IsDefined(prop, typeof(KeyMemberAttribute))).ToArray();
+            var keyProperties = typeof(TEntity).GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(prop => Attribute.IsDefined(prop, typeof(KeyMemberAttribute))).ToArray();
 
             // Create parameter expression for the entity
             ParameterExpression parameter = Expression.Parameter(typeof(TEntity), "s");
@@ -208,9 +208,9 @@ namespace Sample.DB
 
         private static void Update(TEntity dbEntity, TEntity newEntity)
         {
-            var dbProperties = dbEntity.GetType().GetProperties();
-            var newProperties = newEntity.GetType().GetProperties();
-            
+            var dbProperties = GetPrimitiveProperties(dbEntity);
+            var newProperties = GetPrimitiveProperties(newEntity);
+
             dbProperties.Join(newProperties, dbProperty => dbProperty.Name, newProperty => newProperty.Name, (dbProperty, newProperty) => (DbProperty: dbProperty, NewProperty: newProperty))
                         .Where(group => !Attribute.IsDefined(group.DbProperty, typeof(IgnoreMemberAttribute)) && !Attribute.IsDefined(group.DbProperty, typeof(KeyMemberAttribute)))
                         .Select(group => (group.DbProperty, dbValue: group.DbProperty.GetValue(dbEntity), newValue: group.NewProperty.GetValue(newEntity)))
@@ -222,5 +222,8 @@ namespace Sample.DB
                             group.DbProperty.SetValue(dbEntity, group.NewValue);
                         });
         }
+
+        private static IEnumerable<PropertyInfo> GetPrimitiveProperties(TEntity dbEntity)
+            => dbEntity.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(s => s.PropertyType.IsPrimitive || s.PropertyType == typeof(string) || s.PropertyType == typeof(decimal) || s.PropertyType == typeof(DateTime) || s.PropertyType == typeof(Guid));
     }
 }

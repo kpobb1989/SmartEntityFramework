@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 using Sample.Abstractions;
 using Sample.Abstractions.DB;
@@ -21,6 +22,7 @@ namespace Sample.DB
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             optionsBuilder.UseSqlServer(AppSettings.DbConnectionString);
+
            // optionsBuilder.UseInMemoryDatabase("SampleDatabase");
             base.OnConfiguring(optionsBuilder);
         }

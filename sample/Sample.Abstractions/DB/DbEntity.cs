@@ -6,23 +6,13 @@ namespace Sample.Abstractions.DB
 {
     public class DbEntity : IEquatable<DbEntity>
     {
+        public record ValueObject(object? Value = null);
+
         [IgnoreMember]
         public int Id { get; set; }
 
         public bool Equals(DbEntity? other)
             => GetCompositeKey(this).SequenceEqual(GetCompositeKey(other));
-
-        public static bool operator ==(DbEntity obj1, DbEntity obj2) => obj1.Equals(obj2);
-
-        public static bool operator !=(DbEntity obj1, DbEntity obj2) => !(obj1 == obj2);
-
-        private static IEnumerable<ValueObject> GetCompositeKey(object? obj)
-        {
-            return obj?.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                                 .Where(s => !Attribute.IsDefined(s, typeof(IgnoreMemberAttribute)))
-                                 .Select(s => new ValueObject(s.GetValue(obj)))
-                                 .ToList() ?? Enumerable.Empty<ValueObject>();
-        }
 
         public override bool Equals(object obj) => Equals(obj as DbEntity);
 
@@ -36,6 +26,16 @@ namespace Sample.Abstractions.DB
             return hash;
         }
 
-        public record ValueObject(object? Value = null);
+        public static bool operator ==(DbEntity obj1, DbEntity obj2) => obj1.Equals(obj2);
+
+        public static bool operator !=(DbEntity obj1, DbEntity obj2) => !(obj1 == obj2);
+
+        private static IEnumerable<ValueObject> GetCompositeKey(object? obj)
+        {
+            return obj?.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                                 .Where(s => !Attribute.IsDefined(s, typeof(IgnoreMemberAttribute)))
+                                 .Select(s => new ValueObject(s.GetValue(obj)))
+                                 .ToList() ?? Enumerable.Empty<ValueObject>();
+        }
     }
 }
