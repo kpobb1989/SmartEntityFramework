@@ -1,6 +1,4 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-
 using Sample.Abstractions;
 using Sample.Abstractions.DB;
 
@@ -8,8 +6,6 @@ namespace Sample.DB
 {
     public class SampleDbContext : DbContext
     {
-        DbSet<UserEntity> Users { get; set; }
-
         // Empty constructor is required for running EF CLI
         public SampleDbContext()
         {
@@ -23,12 +19,17 @@ namespace Sample.DB
         {
             optionsBuilder.UseSqlServer(AppSettings.DbConnectionString);
 
-           // optionsBuilder.UseInMemoryDatabase("SampleDatabase");
+            // optionsBuilder.UseInMemoryDatabase("SampleDatabase");
             base.OnConfiguring(optionsBuilder);
         }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
+            builder.Entity<CompanyEntity>()
+                .HasMany(s => s.Employees)
+                .WithOne(s => s.Company)
+                .HasForeignKey(s => s.CompanyId);
+
             //builder.Entity<Package>()
             //    .HasKey(s => new { s.Source, s.Name, s.Version });
 

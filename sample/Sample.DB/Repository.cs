@@ -98,7 +98,7 @@ namespace Sample.DB
             bool deleteUnmatch = true,
             CancellationToken ct = default)
         {
-            var dbEntities = await ToListAsync(ct: ct);
+            var dbEntities = await ToListAsync(includeAll: includeAll, include: include, ct: ct);
 
             var keySelector = CreateKeySelector();
 

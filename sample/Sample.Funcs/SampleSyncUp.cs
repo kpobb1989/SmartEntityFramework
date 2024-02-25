@@ -13,10 +13,19 @@ namespace Sample.Funcs
         [Function("SampleSyncUp")]
         public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get")] CancellationToken ct)
         {
-            var user = new UserEntity() { Email = "sportjoy@outlook.com", FirstName = "Vyasya", LastName = "Pupkin" };
-            var user2 = new UserEntity() { Email = "f0rever@i.ua",  FirstName = "Alex", LastName = "Kushnir" };
+            var company = new CompanyEntity()
+            {
+                Name = "Netflix",
+                Address = "121 Albright Way, Los Gatos, CA",
+            };
 
-            await unitOfWork.Entity<UserEntity>().SyncUpAsync(new[] { user, user2 }, ct: ct);
+            var user = new EmployeeEntity() { Email = "sportjoy@outlook.com", FirstName = "Vyasya1", LastName = "Pupkin" };
+            var user2 = new EmployeeEntity() { Email = "f0rever@i.ua", FirstName = "Alex", LastName = "Kushnir" };
+
+            company.Employees.Add(user);
+            company.Employees.Add(user2);
+
+            await unitOfWork.Entity<CompanyEntity>().SyncUpAsync(new[] { company }, include: s => new[] { s.Employees }, ct: ct);
 
             await unitOfWork.SaveChangesAsync(ct);
 
