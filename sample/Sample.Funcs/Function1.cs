@@ -9,7 +9,7 @@ using Sample.Abstractions.DB.Interfaces;
 
 namespace Sample.Funcs
 {
-    public class Function1(IUnitOfWork unitOfWork, ILogger<Function1> logger)
+    public class Function1(IUnitOfWork unitOfWork)
     {
 
         [Function("Function1")]

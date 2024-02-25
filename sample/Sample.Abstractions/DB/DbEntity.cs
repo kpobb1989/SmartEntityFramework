@@ -14,7 +14,7 @@ namespace Sample.Abstractions.DB
         public bool Equals(DbEntity? other)
             => GetCompositeKey(this).SequenceEqual(GetCompositeKey(other));
 
-        public override bool Equals(object obj) => Equals(obj as DbEntity);
+        public override bool Equals(object? obj) => Equals(obj as DbEntity);
 
         public override int GetHashCode()
         {

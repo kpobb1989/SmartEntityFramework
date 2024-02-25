@@ -165,7 +165,7 @@ namespace Sample.DB
             }
         }
 
-        private IEnumerable<INavigation> GetNavigationProperties()
+        private List<INavigation> GetNavigationProperties()
             => dbContext.Model.FindEntityType(typeof(TEntity))!.GetNavigations().ToList();
 
         private static Func<TEntity, object> CreateKeySelector()
@@ -193,7 +193,7 @@ namespace Sample.DB
             return lambda.Compile();
         }
 
-        private static void Update(TEntity dbEntity, TEntity newEntity)
+        private void Update(TEntity dbEntity, TEntity newEntity)
         {
             var dbProperties = GetPrimitiveProperties(dbEntity);
             var newProperties = GetPrimitiveProperties(newEntity);
@@ -210,7 +210,14 @@ namespace Sample.DB
                         });
         }
 
-        private static IEnumerable<PropertyInfo> GetPrimitiveProperties(TEntity dbEntity)
-            => dbEntity.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(s => s.PropertyType.IsPrimitive || s.PropertyType == typeof(string) || s.PropertyType == typeof(decimal) || s.PropertyType == typeof(DateTime) || s.PropertyType == typeof(Guid));
+        private IEnumerable<PropertyInfo> GetPrimitiveProperties(TEntity dbEntity)
+        {
+            var nagivationProperties = GetNavigationProperties().Select(s => s.Name);
+
+            var primitiveProps = dbEntity.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance).ExceptBy(nagivationProperties, s => s.Name);
+
+            return primitiveProps;
+        }
+
     }
 }

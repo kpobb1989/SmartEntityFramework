@@ -10,7 +10,7 @@ namespace Sample.Abstractions
         {
             Configuration = configuration;
         }
-        //;
+
         public static string DbConnectionString => Configuration?.GetConnectionString("DbConnectionString") ?? "Server=localhost\\SQLEXPRESS;Database=sample-db;Trusted_Connection=True;Encrypt=false";
     }
 }

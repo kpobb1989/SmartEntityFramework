@@ -6,7 +6,6 @@ using Sample.Abstractions.DB.Interfaces;
 
 using Sample.Abstractions;
 using Sample.DB;
-using Microsoft.EntityFrameworkCore;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
