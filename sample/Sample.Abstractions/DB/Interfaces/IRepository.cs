@@ -20,11 +20,9 @@ namespace Sample.Abstractions.DB.Interfaces
           CancellationToken ct = default);
 
         Task SyncUpAsync(
-                IEnumerable<TEntity> newData,
-                bool includeAll = false,
-                Expression<Func<TEntity, object?[]>>? include = null,
-                bool deleteUnmatch = true,
-                CancellationToken ct = default);
+            IEnumerable<TEntity> newData,
+            bool deleteUnmatch = true,
+            CancellationToken ct = default);
 
         IQueryable<TEntity> GetQueryable(
                Expression<Func<TEntity, bool>>? filter = null,

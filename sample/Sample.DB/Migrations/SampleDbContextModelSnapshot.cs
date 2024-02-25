@@ -72,7 +72,8 @@ namespace Sample.DB.Migrations
                 {
                     b.HasOne("Sample.Abstractions.DB.CompanyEntity", "Company")
                         .WithMany("Employees")
-                        .HasForeignKey("CompanyId");
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Company");
                 });

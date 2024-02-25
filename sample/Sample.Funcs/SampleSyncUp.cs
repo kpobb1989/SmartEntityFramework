@@ -9,27 +9,35 @@ namespace Sample.Funcs
 {
     public class SampleSyncUp(IUnitOfWork unitOfWork)
     {
-
-        [Function("SampleSyncUp")]
-        public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get")] CancellationToken ct)
+        [Function("SampleSyncUpTimerTrigger")]
+        public async Task RunTimerTrigger([TimerTrigger("0 */5 * * * *", RunOnStartup = true)] CancellationToken ct)
         {
             var company = new CompanyEntity()
             {
-                Name = "Netflix",
-                Address = "121 Albright Way, Los Gatos, CA",
+                Name = "Chevron",
+                Address = "6001 Bollinger Canyon Rd, Suite G, San Ramon, CA"
             };
 
-            var user = new EmployeeEntity() { Email = "sportjoy@outlook.com", FirstName = "Vyasya1", LastName = "Pupkin" };
-            var user2 = new EmployeeEntity() { Email = "f0rever@i.ua", FirstName = "Alex", LastName = "Kushnir" };
+            var company2 = new CompanyEntity()
+            {
+                Name = "Netflix",
+                Address = "121 Albright Way, Los Gatos, CA",
+                Employees = new List<EmployeeEntity>()
+                {
+                     new() { Email = "sportjoy@outlook.com", FirstName = "Vyasya1", LastName = "Pupkin" },
+                     new() { Email = "f0rever@i.ua", FirstName = "Alex", LastName = "Kushnir" }
+                }
+            };
 
-            company.Employees.Add(user);
-            company.Employees.Add(user2);
-
-            await unitOfWork.Entity<CompanyEntity>().SyncUpAsync(new[] { company }, include: s => new[] { s.Employees }, ct: ct);
+            await unitOfWork.Entity<CompanyEntity>().SyncUpAsync(new[] { company, company2 }, ct: ct);
 
             await unitOfWork.SaveChangesAsync(ct);
-
-            return new OkResult();
         }
+
+        //[Function("SampleSyncUp")]
+        //public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get")] CancellationToken ct)
+        //{
+            
+        //}
     }
 }

@@ -28,7 +28,8 @@ namespace Sample.DB
             builder.Entity<CompanyEntity>()
                 .HasMany(s => s.Employees)
                 .WithOne(s => s.Company)
-                .HasForeignKey(s => s.CompanyId);
+                .HasForeignKey(s => s.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             //builder.Entity<Package>()
             //    .HasKey(s => new { s.Source, s.Name, s.Version });

@@ -8,8 +8,6 @@ using Sample.Abstractions.DB.Interfaces;
 using System.Linq.Expressions;
 using System.Reflection;
 
-using static Sample.Abstractions.DB.DbEntity;
-
 namespace Sample.DB
 {
     public class Repository<TEntity>(SampleDbContext dbContext) : IRepository<TEntity> where TEntity : DbEntity
@@ -62,7 +60,7 @@ namespace Sample.DB
 
             if (includeAll)
             {
-                foreach (var entityName in GetNavigationProperties().Where(s => !s.IsCollection).Select(s => s.Name))
+                foreach (var entityName in GetNavigationProperties(typeof(TEntity)).Where(s => !s.IsCollection).Select(s => s.Name))
                 {
                     query = query.Include(entityName);
                 }
@@ -76,7 +74,7 @@ namespace Sample.DB
                     .Select(expression => expression!.Member.Name)
                     .ToArray();
 
-                var navigationProperties = GetNavigationProperties()
+                var navigationProperties = GetNavigationProperties(typeof(TEntity))
                                             .Select(s => s.Name)
                                             .ToArray();
 
@@ -93,12 +91,15 @@ namespace Sample.DB
 
         public async Task SyncUpAsync(
             IEnumerable<TEntity> newEntities,
-            bool includeAll = false,
-            Expression<Func<TEntity, object?[]>>? include = null,
             bool deleteUnmatch = true,
             CancellationToken ct = default)
         {
-            var dbEntities = await ToListAsync(includeAll: includeAll, include: include, ct: ct);
+            foreach (var entity in newEntities.Where(s => GetNavigationProperties(s.GetType()).Count > 0))
+            {
+                throw new Exception("Navigation properties can not be synced up");
+            }
+
+            var dbEntities = await ToListAsync(ct: ct);
 
             var keySelector = CreateKeySelector();
 
@@ -109,18 +110,19 @@ namespace Sample.DB
             var entitiesToUpdate = dbEntities
                 .Join(newEntities, keySelector, keySelector, (dbEntity, newEntity) => (dbEntity, newEntity))
                 .Where(group => group.dbEntity != group.newEntity)
-                .Select(group =>
-                {
-                    Update(group.dbEntity, group.newEntity);
-
-                    return group.dbEntity;
-                }).ToList();
+                .Select(group => new { HasPropsToUpdate = Update(group.dbEntity, group.newEntity), DbEntity = group.dbEntity })
+                .Where(group => group.HasPropsToUpdate)
+                .Select(group => group.DbEntity)
+                .ToList();
 
             Update(entitiesToUpdate);
 
-            var entitiesToDelete = dbEntities.ExceptBy(newEntities.Select(keySelector), keySelector).ToList();
+            if (deleteUnmatch)
+            {
+                var entitiesToDelete = dbEntities.ExceptBy(newEntities.Select(keySelector), keySelector).ToList();
 
-            Remove(entitiesToDelete);
+                Remove(entitiesToDelete);
+            }
         }
 
         public void Add(TEntity entity)
@@ -165,8 +167,8 @@ namespace Sample.DB
             }
         }
 
-        private List<INavigation> GetNavigationProperties()
-            => dbContext.Model.FindEntityType(typeof(TEntity))!.GetNavigations().ToList();
+        private List<INavigation> GetNavigationProperties(Type type)
+            => dbContext.Model.FindEntityType(type)!.GetNavigations().ToList();
 
         private static Func<TEntity, object> CreateKeySelector()
         {
@@ -193,26 +195,29 @@ namespace Sample.DB
             return lambda.Compile();
         }
 
-        private void Update(TEntity dbEntity, TEntity newEntity)
+        private bool Update(TEntity dbEntity, TEntity newEntity)
         {
             var dbProperties = GetPrimitiveProperties(dbEntity);
             var newProperties = GetPrimitiveProperties(newEntity);
 
-            dbProperties.Join(newProperties, dbProperty => dbProperty.Name, newProperty => newProperty.Name, (dbProperty, newProperty) => (DbProperty: dbProperty, NewProperty: newProperty))
+            var propsTouUpdate = dbProperties.Join(newProperties, dbProperty => dbProperty.Name, newProperty => newProperty.Name, (dbProperty, newProperty) => (DbProperty: dbProperty, NewProperty: newProperty))
                         .Where(group => !Attribute.IsDefined(group.DbProperty, typeof(IgnoreMemberAttribute)) && !Attribute.IsDefined(group.DbProperty, typeof(KeyMemberAttribute)))
                         .Select(group => (group.DbProperty, dbValue: group.DbProperty.GetValue(dbEntity), newValue: group.NewProperty.GetValue(newEntity)))
-                        .Where(group => new ValueObject(group.dbValue) != new ValueObject(group.newValue))
+                        .Where(group => group.dbValue != null && !group.dbValue.Equals(group.newValue) || group.dbValue == null && group.newValue != null)
                         .Select(group => (group.DbProperty, NewValue: group.newValue))
-                        .ToList()
-                        .ForEach(group =>
-                        {
-                            group.DbProperty.SetValue(dbEntity, group.NewValue);
-                        });
+                        .ToList();
+
+            propsTouUpdate.ForEach(group =>
+            {
+                group.DbProperty.SetValue(dbEntity, group.NewValue);
+            });
+
+            return propsTouUpdate.Count > 0;
         }
 
         private IEnumerable<PropertyInfo> GetPrimitiveProperties(TEntity dbEntity)
         {
-            var nagivationProperties = GetNavigationProperties().Select(s => s.Name);
+            var nagivationProperties = GetNavigationProperties(typeof(TEntity)).Select(s => s.Name);
 
             var primitiveProps = dbEntity.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance).ExceptBy(nagivationProperties, s => s.Name);
 

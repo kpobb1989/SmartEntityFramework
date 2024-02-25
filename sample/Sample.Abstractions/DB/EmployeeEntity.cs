@@ -5,7 +5,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace Sample.Abstractions.DB
 {
     [Table("Users")]
-    public class EmployeeEntity : DbEntity
+    public record EmployeeEntity : DbEntity
     {
         [KeyMember]
         public string? Email { get; set; }

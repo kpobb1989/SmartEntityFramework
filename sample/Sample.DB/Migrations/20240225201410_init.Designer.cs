@@ -12,7 +12,7 @@ using Sample.DB;
 namespace Sample.DB.Migrations
 {
     [DbContext(typeof(SampleDbContext))]
-    [Migration("20240225184202_init")]
+    [Migration("20240225201410_init")]
     partial class init
     {
         /// <inheritdoc />
@@ -75,7 +75,8 @@ namespace Sample.DB.Migrations
                 {
                     b.HasOne("Sample.Abstractions.DB.CompanyEntity", "Company")
                         .WithMany("Employees")
-                        .HasForeignKey("CompanyId");
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Company");
                 });
