@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
+using Microsoft.EntityFrameworkCore.Query;
 
 using Sample.DB.Attributes;
 using Sample.DB.Entities;
@@ -99,7 +100,7 @@ namespace Sample.DB
 
         public async Task RefreshAsync(
             IEnumerable<TEntity> newEntities,
-            bool deleteUnmatch = true,
+            bool deleteUnmatch = false,
             CancellationToken ct = default)
         {
             if (newEntities.Where(entity => HasNavigationPropertyWithValue(entity)).Any())
@@ -109,7 +110,7 @@ namespace Sample.DB
 
             var dbEntities = await ToListAsync(ct: ct);
 
-            var keySelector = CreateLambdaSelector();
+            var keySelector = CreateKeySelector();
 
             var entitiesToAdd = newEntities.ExceptBy(dbEntities.Select(keySelector), keySelector).ToList();
 
@@ -118,12 +119,12 @@ namespace Sample.DB
             var entitiesToUpdate = dbEntities
                 .Join(newEntities, keySelector, keySelector, (dbEntity, newEntity) => (dbEntity, newEntity))
                 .Where(group => group.dbEntity != group.newEntity)
-                .Select(group => new { HasPropsToUpdate = Update(group.dbEntity, group.newEntity), DbEntity = group.dbEntity })
-                .Where(group => group.HasPropsToUpdate)
-                .Select(group => group.DbEntity)
                 .ToList();
 
-            Update(entitiesToUpdate);
+            foreach (var (dbEntity, newEntity) in entitiesToUpdate)
+            {
+                Update(dbEntity, newEntity);
+            }
 
             if (deleteUnmatch)
             {
@@ -132,14 +133,10 @@ namespace Sample.DB
                 Delete(entitiesToDelete);
             }
 
-            // Append Ids
-            dbEntities = await ToListAsync(ct: ct);
-            newEntities.Join(dbEntities, keySelector, keySelector, (newEntity, dbEntity) => new { NewEntity = newEntity, DbEntity = dbEntity })
-                .ToList()
-                .ForEach(group =>
-                {
-                    group.NewEntity.Id = group.DbEntity.Id;
-                });
+            foreach (var newEntity in newEntities)
+            {
+                _dbContext.Attach(newEntity);
+            }
         }
 
         public void Create(TEntity entity)
@@ -179,7 +176,7 @@ namespace Sample.DB
             return _dbSet.Where(s => ids.Contains(s.Id)).ExecuteDelete();
         }
 
-        private static Func<TEntity, object> CreateLambdaSelector()
+        private static Func<TEntity, object> CreateKeySelector()
         {
             var parameter = Expression.Parameter(typeof(TEntity), "s");
 
@@ -198,7 +195,7 @@ namespace Sample.DB
             return lambda.Compile();
         }
 
-        private bool Update(TEntity dbEntity, TEntity newEntity)
+        private int Update(TEntity dbEntity, TEntity newEntity)
         {
             var dbProperties = GetPrimitiveProperties(dbEntity);
             var newProperties = GetPrimitiveProperties(newEntity);
@@ -206,8 +203,7 @@ namespace Sample.DB
             var propsTouUpdate = dbProperties.Join(newProperties, dbProperty => dbProperty.Name, newProperty => newProperty.Name, (dbProperty, newProperty) => (DbProperty: dbProperty, NewProperty: newProperty))
                         .Where(group => !Attribute.IsDefined(group.DbProperty, typeof(IgnoreCompareAttribute)) && !Attribute.IsDefined(group.DbProperty, typeof(CompositeKeyAttribute)))
                         .Select(group => (group.DbProperty, DbValue: group.DbProperty.GetValue(dbEntity), NewValue: group.NewProperty.GetValue(newEntity)))
-                        .Where(group => group.DbValue != null && !group.DbValue.Equals(group.NewValue) || group.DbValue == null && group.NewValue != null)
-                        .Select(group => (group.DbProperty, group.NewValue))
+                        .Where(s => !object.Equals(s.DbValue, s.NewValue))
                         .ToList();
 
             propsTouUpdate.ForEach(group =>
@@ -215,7 +211,17 @@ namespace Sample.DB
                 group.DbProperty.SetValue(dbEntity, group.NewValue);
             });
 
-            return propsTouUpdate.Count > 0;
+            if (propsTouUpdate.Count > 0)
+            {
+                if (_dbContext.Entry(dbEntity).State == EntityState.Detached)
+                {
+                    _dbSet.Attach(dbEntity);
+                }
+
+                _dbContext.Entry(dbEntity).State = EntityState.Modified;
+            }
+
+            return propsTouUpdate.Count;
         }
 
         private List<INavigation> GetNavigationProperties(Type type)

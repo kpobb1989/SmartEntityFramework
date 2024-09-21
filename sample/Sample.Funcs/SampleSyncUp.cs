@@ -17,6 +17,7 @@ namespace Sample.Funcs
     {
         ""name"": ""Chevron"",
         ""address"": ""6001 Bollinger Canyon Rd, Suite G, San Ramon, CA"",
+        ""zip"": 94583,
         ""employees"": [
             {
                 ""email"": ""vyasyapupkin@chevron.com"",
@@ -33,6 +34,7 @@ namespace Sample.Funcs
     {
         ""name"": ""Netflix"",
         ""address"": ""121 Albright Way, Los Gatos, CA"",
+        ""zip"": 94000,
         ""employees"": []
     }
 ]";
@@ -45,6 +47,7 @@ namespace Sample.Funcs
             {
                 Name = c.Name,
                 Address = c.Address,
+                Zip = c.Zip
             }).ToList();
 
             await unitOfWork.Entity<CompanyEntity>().RefreshAsync(dbCompanies, ct: ct);
@@ -68,6 +71,7 @@ namespace Sample.Funcs
         {
             public string? Name { get; set; }
             public string? Address { get; set; }
+            public int? Zip { get; set; }
             public EmployeeDto[]? Employees { get; set; } = [];
         }
 

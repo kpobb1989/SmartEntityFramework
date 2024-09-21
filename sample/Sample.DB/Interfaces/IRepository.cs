@@ -23,7 +23,7 @@ namespace Sample.DB.Interfaces
 
         Task RefreshAsync(
             IEnumerable<TEntity> newData,
-            bool deleteUnmatch = true,
+            bool deleteUnmatch = false,
             CancellationToken ct = default);
 
         IQueryable<TEntity> GetQueryable(
