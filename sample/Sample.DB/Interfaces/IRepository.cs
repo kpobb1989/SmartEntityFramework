@@ -1,6 +1,8 @@
-﻿using System.Linq.Expressions;
+﻿using Sample.DB.Entities;
 
-namespace Sample.Abstractions.DB.Interfaces
+using System.Linq.Expressions;
+
+namespace Sample.DB.Interfaces
 {
     public interface IRepository<TEntity> where TEntity : DbEntity
     {
@@ -19,7 +21,7 @@ namespace Sample.Abstractions.DB.Interfaces
           bool asNoTracking = true,
           CancellationToken ct = default);
 
-        Task SyncUpAsync(
+        Task RefreshAsync(
             IEnumerable<TEntity> newData,
             bool deleteUnmatch = true,
             CancellationToken ct = default);
@@ -31,17 +33,19 @@ namespace Sample.Abstractions.DB.Interfaces
                Expression<Func<TEntity, object?[]>>? include = null,
                bool asNoTracking = true);
 
-        void Add(TEntity entity);
+        void Create(TEntity entity);
 
-        void Add(IEnumerable<TEntity> entities);
+        void Create(IEnumerable<TEntity> entities);
 
         void Update(TEntity entity);
 
         void Update(IEnumerable<TEntity> entities);
 
-        void Remove(TEntity entity);
+        int Delete();
 
-        void Remove(IEnumerable<TEntity> entities);
+        int Delete(TEntity entity);
+
+        int Delete(IEnumerable<TEntity> entities);
 
         Task<long> CountAsync(Expression<Func<TEntity, bool>>? filter = null, CancellationToken ct = default);
     }

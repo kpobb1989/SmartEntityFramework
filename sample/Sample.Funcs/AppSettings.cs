@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.Configuration;
 
-namespace Sample.Abstractions
+namespace Sample.Funcs
 {
     public static class AppSettings
     {

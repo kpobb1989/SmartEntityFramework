@@ -1,8 +1,7 @@
-﻿
-namespace Sample.Abstractions.Attributes
+﻿namespace Sample.DB.Attributes
 {
     [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
-    public class IgnoreMemberAttribute : Attribute
+    public class CompositeKeyAttribute : Attribute
     {
     }
 }

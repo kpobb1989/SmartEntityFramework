@@ -1,11 +1,10 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Sample.Abstractions.DB.Interfaces;
-
-using Sample.Abstractions;
 using Sample.DB;
 using Microsoft.Extensions.Configuration;
+using Sample.Funcs;
+using Sample.DB.Interfaces;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()

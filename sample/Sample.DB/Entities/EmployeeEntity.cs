@@ -1,13 +1,13 @@
-﻿using Sample.Abstractions.Attributes;
+﻿using Sample.DB.Attributes;
 
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Sample.Abstractions.DB
+namespace Sample.DB.Entities
 {
     [Table("Users")]
-    public record EmployeeEntity : DbEntity
+    public class EmployeeEntity : DbEntity
     {
-        [KeyMember]
+        [CompositeKey]
         public string? Email { get; set; }
 
         public string? FirstName { get; set; }

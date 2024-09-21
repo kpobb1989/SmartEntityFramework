@@ -1,4 +1,6 @@
-﻿namespace Sample.Abstractions.DB.Interfaces
+﻿using Sample.DB.Entities;
+
+namespace Sample.DB.Interfaces
 {
     public interface IUnitOfWork
     {

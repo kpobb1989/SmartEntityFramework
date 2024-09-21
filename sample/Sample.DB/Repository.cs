@@ -1,9 +1,11 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 
-using Sample.Abstractions.Attributes;
-using Sample.Abstractions.DB;
-using Sample.Abstractions.DB.Interfaces;
+using Sample.DB.Attributes;
+using Sample.DB.Entities;
+using Sample.DB.Interfaces;
 
 using System.Diagnostics;
 using System.Linq.Expressions;
@@ -56,19 +58,13 @@ namespace Sample.DB
             IQueryable<TEntity> query = _dbSet;
 
             if (readOnly)
-            {
                 query = query.AsNoTracking();
-            }
 
             if (filter != null)
-            {
                 query = query.Where(filter);
-            }
 
             if (orderBy != null)
-            {
                 query = query.OrderBy(orderBy);
-            }
 
             if (includeAll)
             {
@@ -101,23 +97,23 @@ namespace Sample.DB
             return query;
         }
 
-        public async Task SyncUpAsync(
+        public async Task RefreshAsync(
             IEnumerable<TEntity> newEntities,
             bool deleteUnmatch = true,
             CancellationToken ct = default)
         {
             if (newEntities.Where(entity => HasNavigationPropertyWithValue(entity)).Any())
             {
-                throw new Exception("Navigation properties can not be synced up");
+                throw new Exception("Navigation properties can not be refreshed");
             }
 
             var dbEntities = await ToListAsync(ct: ct);
 
-            var keySelector = CreateKeySelector();
+            var keySelector = CreateLambdaSelector();
 
             var entitiesToAdd = newEntities.ExceptBy(dbEntities.Select(keySelector), keySelector).ToList();
 
-            Add(entitiesToAdd);
+            Create(entitiesToAdd);
 
             var entitiesToUpdate = dbEntities
                 .Join(newEntities, keySelector, keySelector, (dbEntity, newEntity) => (dbEntity, newEntity))
@@ -133,7 +129,7 @@ namespace Sample.DB
             {
                 var entitiesToDelete = dbEntities.ExceptBy(newEntities.Select(keySelector), keySelector).ToList();
 
-                Remove(entitiesToDelete);
+                Delete(entitiesToDelete);
             }
 
             // Append Ids
@@ -146,10 +142,10 @@ namespace Sample.DB
                 });
         }
 
-        public void Add(TEntity entity)
+        public void Create(TEntity entity)
             => _dbSet.Add(entity);
 
-        public void Add(IEnumerable<TEntity> entities)
+        public void Create(IEnumerable<TEntity> entities)
             => _dbSet.AddRange(entities);
 
         public void Update(TEntity entity)
@@ -170,45 +166,34 @@ namespace Sample.DB
             }
         }
 
-        public void Remove(TEntity entity)
-        {
-            if (_dbContext.Entry(entity).State == EntityState.Detached)
-            {
-                _dbSet.Attach(entity);
-            }
+        public int Delete()
+            => _dbSet.ExecuteDelete();
 
-            _dbSet.Remove(entity);
+        public int Delete(TEntity entity)
+            => _dbSet.Where(s => s.Id == entity.Id).ExecuteDelete();
+
+        public int Delete(IEnumerable<TEntity> entities)
+        {
+            var ids = entities.Select(s => s.Id).ToList();
+
+            return _dbSet.Where(s => ids.Contains(s.Id)).ExecuteDelete();
         }
 
-        public void Remove(IEnumerable<TEntity> entities)
+        private static Func<TEntity, object> CreateLambdaSelector()
         {
-            foreach (var entity in entities)
-            {
-                Remove(entity);
-            }
-        }
+            var parameter = Expression.Parameter(typeof(TEntity), "s");
 
-        private static Func<TEntity, object> CreateKeySelector()
-        {
-            var keyProperties = typeof(TEntity).GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(prop => Attribute.IsDefined(prop, typeof(KeyMemberAttribute))).ToArray();
+            var members = typeof(TEntity)
+                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(prop => Attribute.IsDefined(prop, typeof(CompositeKeyAttribute)))
+                .Select(prop => Expression.Bind(prop, Expression.Property(parameter, prop)))
+                .ToArray();
 
-            // Create parameter expression for the entity
-            ParameterExpression parameter = Expression.Parameter(typeof(TEntity), "s");
+            var constructor = typeof(TEntity).GetConstructor(Type.EmptyTypes)!;
 
-            // Create member bindings for each key property
-            var bindings = keyProperties.Select(property =>
-            {
-                MemberExpression propertyExpression = Expression.Property(parameter, property);
-                UnaryExpression convertExpression = Expression.Convert(propertyExpression, property.PropertyType);
-                return Expression.Bind(property, convertExpression);
-            });
+            var body = Expression.MemberInit(Expression.New(constructor), members);
 
-            // Create anonymous type initializer
-            var anonymousType = Expression.New(typeof(TEntity));
-            var initializer = Expression.MemberInit(anonymousType, bindings);
-
-            // Create lambda expression
-            var lambda = Expression.Lambda<Func<TEntity, object>>(initializer, parameter);
+            var lambda = Expression.Lambda<Func<TEntity, object>>(body, parameter);
 
             return lambda.Compile();
         }
@@ -219,10 +204,10 @@ namespace Sample.DB
             var newProperties = GetPrimitiveProperties(newEntity);
 
             var propsTouUpdate = dbProperties.Join(newProperties, dbProperty => dbProperty.Name, newProperty => newProperty.Name, (dbProperty, newProperty) => (DbProperty: dbProperty, NewProperty: newProperty))
-                        .Where(group => !Attribute.IsDefined(group.DbProperty, typeof(IgnoreMemberAttribute)) && !Attribute.IsDefined(group.DbProperty, typeof(KeyMemberAttribute)))
-                        .Select(group => (group.DbProperty, dbValue: group.DbProperty.GetValue(dbEntity), newValue: group.NewProperty.GetValue(newEntity)))
-                        .Where(group => group.dbValue != null && !group.dbValue.Equals(group.newValue) || group.dbValue == null && group.newValue != null)
-                        .Select(group => (group.DbProperty, NewValue: group.newValue))
+                        .Where(group => !Attribute.IsDefined(group.DbProperty, typeof(IgnoreCompareAttribute)) && !Attribute.IsDefined(group.DbProperty, typeof(CompositeKeyAttribute)))
+                        .Select(group => (group.DbProperty, DbValue: group.DbProperty.GetValue(dbEntity), NewValue: group.NewProperty.GetValue(newEntity)))
+                        .Where(group => group.DbValue != null && !group.DbValue.Equals(group.NewValue) || group.DbValue == null && group.NewValue != null)
+                        .Select(group => (group.DbProperty, group.NewValue))
                         .ToList();
 
             propsTouUpdate.ForEach(group =>

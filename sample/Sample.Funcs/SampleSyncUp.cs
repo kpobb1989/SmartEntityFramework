@@ -1,12 +1,9 @@
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
 
-using Sample.Abstractions.DB;
-using Sample.Abstractions.DB.Interfaces;
+using Sample.DB.Entities;
+using Sample.DB.Interfaces;
 
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace Sample.Funcs
 {
@@ -39,7 +36,6 @@ namespace Sample.Funcs
         ""employees"": []
     }
 ]";
-
             var companies = JsonSerializer.Deserialize<CompanyDto[]>(json, new JsonSerializerOptions()
             {
                 PropertyNameCaseInsensitive = true
@@ -51,7 +47,7 @@ namespace Sample.Funcs
                 Address = c.Address,
             }).ToList();
 
-            await unitOfWork.Entity<CompanyEntity>().SyncUpAsync(dbCompanies, ct: ct);
+            await unitOfWork.Entity<CompanyEntity>().RefreshAsync(dbCompanies, ct: ct);
 
             await unitOfWork.SaveChangesAsync(ct);
 
@@ -63,7 +59,7 @@ namespace Sample.Funcs
                 CompanyId = dbCompanies.First(c => c.Name == company.Name).Id,
             }).ToList();
 
-            await unitOfWork.Entity<EmployeeEntity>().SyncUpAsync(dbEmployees, ct: ct);
+            await unitOfWork.Entity<EmployeeEntity>().RefreshAsync(dbEmployees, ct: ct);
 
             await unitOfWork.SaveChangesAsync(ct);
         }
@@ -81,11 +77,5 @@ namespace Sample.Funcs
             public string? FirstName { get; set; }
             public string? LastName { get; set; }
         }
-
-        //[Function("SampleSyncUp")]
-        //public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get")] CancellationToken ct)
-        //{
-
-        //}
     }
 }

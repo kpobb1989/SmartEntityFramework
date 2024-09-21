@@ -1,6 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Sample.Abstractions;
-using Sample.Abstractions.DB;
+using Microsoft.Extensions.Logging;
+
+using Sample.Core;
+using Sample.DB.Entities;
 
 namespace Sample.DB
 {
@@ -17,7 +19,9 @@ namespace Sample.DB
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseSqlServer(AppSettings.DbConnectionString);
+            optionsBuilder.UseSqlServer(AppSettings.DbConnectionString)
+                .EnableSensitiveDataLogging()
+                .LogTo(Console.WriteLine, LogLevel.Information);
 
             // optionsBuilder.UseInMemoryDatabase("SampleDatabase");
             base.OnConfiguring(optionsBuilder);

@@ -1,5 +1,5 @@
-﻿using Sample.Abstractions.DB;
-using Sample.Abstractions.DB.Interfaces;
+﻿using Sample.DB.Entities;
+using Sample.DB.Interfaces;
 
 using System.Diagnostics;
 
