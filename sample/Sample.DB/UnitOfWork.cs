@@ -10,7 +10,7 @@ namespace Sample.DB
         private readonly Dictionary<Type, object> _repositories = [];
 
         [DebuggerStepThrough]
-        public IRepository<TEntity> Entity<TEntity>() where TEntity : DbEntity
+        public IRepository<TEntity> Repository<TEntity>() where TEntity : DbEntity
         {
             var type = typeof(TEntity);
 

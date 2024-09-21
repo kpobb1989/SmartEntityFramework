@@ -186,6 +186,11 @@ namespace Sample.DB
                 .Select(prop => Expression.Bind(prop, Expression.Property(parameter, prop)))
                 .ToArray();
 
+            if (!members.Any())
+            {
+                throw new Exception($"At least one property must be attributed by {nameof(CompositeKeyAttribute)}");
+            }
+
             var constructor = typeof(TEntity).GetConstructor(Type.EmptyTypes)!;
 
             var body = Expression.MemberInit(Expression.New(constructor), members);

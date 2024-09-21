@@ -50,7 +50,7 @@ namespace Sample.Funcs
                 Zip = c.Zip
             }).ToList();
 
-            await unitOfWork.Entity<CompanyEntity>().RefreshAsync(dbCompanies, ct: ct);
+            await unitOfWork.Repository<CompanyEntity>().RefreshAsync(dbCompanies, ct: ct);
 
             await unitOfWork.SaveChangesAsync(ct);
 
@@ -62,7 +62,7 @@ namespace Sample.Funcs
                 CompanyId = dbCompanies.First(c => c.Name == company.Name).Id,
             }).ToList();
 
-            await unitOfWork.Entity<EmployeeEntity>().RefreshAsync(dbEmployees, ct: ct);
+            await unitOfWork.Repository<EmployeeEntity>().RefreshAsync(dbEmployees, ct: ct);
 
             await unitOfWork.SaveChangesAsync(ct);
         }
