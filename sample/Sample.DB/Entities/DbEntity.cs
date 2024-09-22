@@ -2,6 +2,8 @@
 
 using System.Collections;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace Sample.DB.Entities
@@ -10,6 +12,18 @@ namespace Sample.DB.Entities
     {
         [IgnoreCompare]
         public int Id { get; set; }
+
+        public string? Hash { get; set; }
+
+        public override string ToString()
+        {
+            var result = GetType()
+               .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+               .Where(s => s.CanRead && !IsNavigationProperty(s) && !Attribute.IsDefined(s, typeof(IgnoreCompareAttribute)))
+               .ToDictionary(kvp => kvp.Name, kvp => kvp.GetValue(this));
+
+            return JsonSerializer.Serialize(result);
+        }
 
         public override bool Equals(object? obj)
         {
@@ -22,25 +36,13 @@ namespace Sample.DB.Entities
         }
 
         public override int GetHashCode()
-        {
-            return ToString().GetHashCode();
-        }
+            => ToString().GetHashCode();
 
         public static bool operator ==(DbEntity x, DbEntity y)
             => x.ToString().Equals(y.ToString());
 
         public static bool operator !=(DbEntity x, DbEntity y)
             => !(x == y);
-
-        public override string ToString()
-        {
-            var result = GetType()
-                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(s => s.CanRead && !IsNavigationProperty(s) && !Attribute.IsDefined(s, typeof(IgnoreCompareAttribute)))
-                .ToDictionary(kvp => kvp.Name, kvp => kvp.GetValue(this));
-
-            return JsonSerializer.Serialize(result);
-        }
 
         private static bool IsNavigationProperty(PropertyInfo property)
         {
@@ -64,6 +66,7 @@ namespace Sample.DB.Entities
 
             return false;
         }
+
     }
 
 }

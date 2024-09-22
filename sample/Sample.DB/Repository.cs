@@ -1,8 +1,5 @@
-﻿using Microsoft.Data.SqlClient;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
-using Microsoft.EntityFrameworkCore.Query;
 
 using Sample.DB.Attributes;
 using Sample.DB.Entities;
@@ -11,6 +8,8 @@ using Sample.DB.Interfaces;
 using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Sample.DB
 {
@@ -103,9 +102,14 @@ namespace Sample.DB
             bool deleteUnmatch = false,
             CancellationToken ct = default)
         {
-            if (newEntities.Where(entity => HasNavigationPropertyWithValue(entity)).Any())
+            if (newEntities.Any(HasNavigationPropertyWithValue))
             {
-                throw new Exception("Navigation properties can not be refreshed");
+                throw new NotSupportedException("Navigation property can not be refreshed");
+            }
+
+            foreach (var entity in newEntities)
+            {
+                entity.Hash = HashData(entity);
             }
 
             var dbEntities = await ToListAsync(ct: ct);
@@ -133,9 +137,26 @@ namespace Sample.DB
                 Delete(entitiesToDelete);
             }
 
-            foreach (var newEntity in newEntities)
+
+            await _dbContext.SaveChangesAsync(ct);
+
+            newEntities
+                .Join(dbEntities, keySelector, keySelector, (newEntity, dbEntity) => new { NewEntity = newEntity, DbEntity = dbEntity })
+                .ToList()
+                .ForEach(group => group.NewEntity.Id = group.DbEntity.Id);
+        }
+
+        private void SetNavigationPropertiesToNull(TEntity entity)
+        {
+            var properties = typeof(TEntity).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+            foreach (var property in properties)
             {
-                _dbContext.Attach(newEntity);
+                // Check if the property is a navigation property (assumed to be a reference type)
+                if (property.CanWrite && property.PropertyType.IsClass && property.PropertyType != typeof(string))
+                {
+                    property.SetValue(entity, null);
+                }
             }
         }
 
@@ -188,7 +209,7 @@ namespace Sample.DB
 
             if (!members.Any())
             {
-                throw new Exception($"At least one property must be attributed by {nameof(CompositeKeyAttribute)}");
+                throw new NotSupportedException($"At least one property must be attributed by {nameof(CompositeKeyAttribute)}");
             }
 
             var constructor = typeof(TEntity).GetConstructor(Type.EmptyTypes)!;
@@ -227,6 +248,20 @@ namespace Sample.DB
             }
 
             return propsTouUpdate.Count;
+        }
+
+        private static string HashData(object input)
+        {
+            byte[] hashBytes = MD5.HashData(Encoding.UTF8.GetBytes(input.ToString()!));
+
+            StringBuilder sb = new();
+
+            foreach (byte b in hashBytes)
+            {
+                sb.Append(b.ToString("x2"));
+            }
+
+            return sb.ToString();
         }
 
         private List<INavigation> GetNavigationProperties(Type type)

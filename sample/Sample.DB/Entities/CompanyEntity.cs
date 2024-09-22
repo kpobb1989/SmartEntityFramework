@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Sample.DB.Entities
 {
-    [Table("Companies")]
+    [Table("Employees")]
     public class CompanyEntity : DbEntity
     {
         [CompositeKey]

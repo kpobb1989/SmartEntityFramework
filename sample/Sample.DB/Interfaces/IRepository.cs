@@ -22,7 +22,7 @@ namespace Sample.DB.Interfaces
           CancellationToken ct = default);
 
         Task RefreshAsync(
-            IEnumerable<TEntity> newData,
+            IEnumerable<TEntity> newEntities,
             bool deleteUnmatch = false,
             CancellationToken ct = default);
 

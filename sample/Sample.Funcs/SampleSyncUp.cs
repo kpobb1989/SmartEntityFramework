@@ -5,6 +5,7 @@ using Sample.DB.Interfaces;
 
 using System.Text.Json;
 
+
 namespace Sample.Funcs
 {
     public class SampleSyncUp(IUnitOfWork unitOfWork)
@@ -21,7 +22,7 @@ namespace Sample.Funcs
         ""employees"": [
             {
                 ""email"": ""vyasyapupkin@chevron.com"",
-                ""firstName"": ""Vyasya"",
+                ""firstName"": ""Vyasya1"",
                 ""lastName"": ""Pupkin""
             },
             {
@@ -35,26 +36,47 @@ namespace Sample.Funcs
         ""name"": ""Netflix"",
         ""address"": ""121 Albright Way, Los Gatos, CA"",
         ""zip"": 94000,
-        ""employees"": []
+        ""employees"": [
+{
+                ""email"": ""vlad@netflix.com"",
+                ""firstName"": ""Vlad"",
+                ""lastName"": ""Kushnir""
+            }]
     }
 ]";
-            var companies = JsonSerializer.Deserialize<CompanyDto[]>(json, new JsonSerializerOptions()
+
+
+           // unitOfWork.Repository<CompanyEntity>().Delete();
+
+           // await unitOfWork.SaveChangesAsync(ct);
+
+            var dtoCompanies = JsonSerializer.Deserialize<CompanyDto[]>(json, new JsonSerializerOptions()
             {
                 PropertyNameCaseInsensitive = true
             }) ?? Enumerable.Empty<CompanyDto>();
 
-            var dbCompanies = companies.Select(c => new CompanyEntity
+            var dbCompanies = dtoCompanies.Select(dto =>
             {
-                Name = c.Name,
-                Address = c.Address,
-                Zip = c.Zip
+                var company = new CompanyEntity
+                {
+                    Name = dto.Name,
+                    Address = dto.Address,
+                    Zip = dto.Zip,
+
+                    //Employees = dto.Employees?.Select(employee => new EmployeeEntity
+                    //{
+                    //    Email = employee.Email,
+                    //    FirstName = employee.FirstName,
+                    //    LastName = employee.LastName,
+                    //}).ToList()
+                };
+
+                return company;
             }).ToList();
 
             await unitOfWork.Repository<CompanyEntity>().RefreshAsync(dbCompanies, ct: ct);
 
-            await unitOfWork.SaveChangesAsync(ct);
-
-            var dbEmployees = companies.SelectMany(c => c.Employees!, (company, employee) => new EmployeeEntity
+            var dbEmployees = dtoCompanies.SelectMany(c => c.Employees!, (company, employee) => new EmployeeEntity
             {
                 Email = employee.Email,
                 FirstName = employee.FirstName,
@@ -63,8 +85,6 @@ namespace Sample.Funcs
             }).ToList();
 
             await unitOfWork.Repository<EmployeeEntity>().RefreshAsync(dbEmployees, ct: ct);
-
-            await unitOfWork.SaveChangesAsync(ct);
         }
 
         public record CompanyDto
