@@ -44,7 +44,7 @@ namespace Sample.DB.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Employees", (string)null);
+                    b.ToTable("Employees");
                 });
 
             modelBuilder.Entity("Sample.DB.Entities.EmployeeEntity", b =>
@@ -74,7 +74,7 @@ namespace Sample.DB.Migrations
 
                     b.HasIndex("CompanyId");
 
-                    b.ToTable("Users", (string)null);
+                    b.ToTable("Users");
                 });
 
             modelBuilder.Entity("Sample.DB.Entities.EmployeeEntity", b =>

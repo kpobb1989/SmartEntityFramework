@@ -12,7 +12,7 @@ using Sample.DB;
 namespace Sample.DB.Migrations
 {
     [DbContext(typeof(SampleDbContext))]
-    [Migration("20240921205323_AddedHashField")]
+    [Migration("20240922212817_AddedHashField")]
     partial class AddedHashField
     {
         /// <inheritdoc />

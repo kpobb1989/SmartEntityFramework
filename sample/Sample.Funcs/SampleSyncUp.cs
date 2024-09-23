@@ -46,9 +46,9 @@ namespace Sample.Funcs
 ]";
 
 
-           // unitOfWork.Repository<CompanyEntity>().Delete();
+            // unitOfWork.Repository<CompanyEntity>().Delete();
 
-           // await unitOfWork.SaveChangesAsync(ct);
+            // await unitOfWork.SaveChangesAsync(ct);
 
             var dtoCompanies = JsonSerializer.Deserialize<CompanyDto[]>(json, new JsonSerializerOptions()
             {
@@ -76,15 +76,15 @@ namespace Sample.Funcs
 
             await unitOfWork.Repository<CompanyEntity>().RefreshAsync(dbCompanies, ct: ct);
 
-            var dbEmployees = dtoCompanies.SelectMany(c => c.Employees!, (company, employee) => new EmployeeEntity
-            {
-                Email = employee.Email,
-                FirstName = employee.FirstName,
-                LastName = employee.LastName,
-                CompanyId = dbCompanies.First(c => c.Name == company.Name).Id,
-            }).ToList();
+            //var dbEmployees = dtoCompanies.SelectMany(c => c.Employees!, (company, employee) => new EmployeeEntity
+            //{
+            //    Email = employee.Email,
+            //    FirstName = employee.FirstName,
+            //    LastName = employee.LastName,
+            //    CompanyId = dbCompanies.First(c => c.Name == company.Name).Id,
+            //}).ToList();
 
-            await unitOfWork.Repository<EmployeeEntity>().RefreshAsync(dbEmployees, ct: ct);
+            //await unitOfWork.Repository<EmployeeEntity>().RefreshAsync(dbEmployees, ct: ct);
         }
 
         public record CompanyDto
