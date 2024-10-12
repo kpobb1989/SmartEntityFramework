@@ -4,6 +4,8 @@ using Microsoft.Extensions.Logging;
 using Sample.Core;
 using Sample.DB.Entities;
 
+using System.Diagnostics;
+
 namespace Sample.DB
 {
     public class SampleDbContext : DbContext
@@ -17,6 +19,7 @@ namespace Sample.DB
         {
         }
 
+        [DebuggerStepThrough]
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             optionsBuilder.UseSqlServer(AppSettings.DbConnectionString)

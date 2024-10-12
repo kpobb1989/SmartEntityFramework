@@ -33,9 +33,6 @@ namespace Sample.DB.Migrations
                     b.Property<string>("Address")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("Hash")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("Name")
                         .HasColumnType("nvarchar(max)");
 
@@ -44,10 +41,10 @@ namespace Sample.DB.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Employees");
+                    b.ToTable("Employees", (string)null);
                 });
 
-            modelBuilder.Entity("Sample.DB.Entities.EmployeeEntity", b =>
+            modelBuilder.Entity("Sample.DB.Entities.UserEntity", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -64,9 +61,6 @@ namespace Sample.DB.Migrations
                     b.Property<string>("FirstName")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("Hash")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("LastName")
                         .HasColumnType("nvarchar(max)");
 
@@ -74,10 +68,10 @@ namespace Sample.DB.Migrations
 
                     b.HasIndex("CompanyId");
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", (string)null);
                 });
 
-            modelBuilder.Entity("Sample.DB.Entities.EmployeeEntity", b =>
+            modelBuilder.Entity("Sample.DB.Entities.UserEntity", b =>
                 {
                     b.HasOne("Sample.DB.Entities.CompanyEntity", "Company")
                         .WithMany("Employees")

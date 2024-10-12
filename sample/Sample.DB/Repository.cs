@@ -5,13 +5,10 @@ using Sample.DB.Attributes;
 using Sample.DB.Entities;
 using Sample.DB.Interfaces;
 
-using System.Collections;
 using System.Diagnostics;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 
 
 namespace Sample.DB
@@ -30,26 +27,13 @@ namespace Sample.DB
         }
 
         public void Create(TEntity entity)
-        {
-            entity.Hash = GetHash(entity);
-
-            _dbSet.Add(entity);
-        }
+            => _dbSet.Add(entity);
 
         public void Create(IEnumerable<TEntity> entities)
-        {
-            foreach (var entity in entities)
-            {
-                entity.Hash = GetHash(entity);
-            }
-
-            _dbSet.AddRange(entities);
-        }
+            => _dbSet.AddRange(entities);
 
         public void Update(TEntity entity)
         {
-            entity.Hash = GetHash(entity);
-
             if (_dbContext.Entry(entity).State == EntityState.Detached)
             {
                 _dbSet.Attach(entity);
@@ -76,7 +60,7 @@ namespace Sample.DB
         {
             var ids = entities.Select(s => s.Id).ToList();
 
-            return _dbSet.Where(s => ids.Contains(s.Id)).ExecuteDelete();
+            return _dbSet.Where(dbEntity => ids.Contains(dbEntity.Id)).ExecuteDelete();
         }
 
         public IQueryable<TEntity> GetQueryable(
@@ -150,7 +134,7 @@ namespace Sample.DB
             CancellationToken ct = default)
             => await GetQueryable(filter).LongCountAsync(ct);
 
-        public async Task RefreshAsync(
+        public async Task RefreshAndSaveChangesAsync(
             IEnumerable<TEntity> newEntities,
             bool deleteUnmatch = false,
             CancellationToken ct = default)
@@ -160,31 +144,48 @@ namespace Sample.DB
                 throw new NotSupportedException("Navigation property can not be refreshed");
             }
 
-            foreach (var entity in newEntities)
-            {
-                entity.Hash = GetHash(entity);
-            }
-
-            var dbEntitiesQuery = GetQueryable();
-
             var keySelector = CreateKeySelector();
 
-            var entitiesToAdd = newEntities.ExceptBy(dbEntitiesQuery.Select(keySelector.Compile()), keySelector.Compile()).ToList();
+            var dbEntities = await ToListAsync(ct: ct);
+
+            var entitiesToAdd = newEntities.ExceptBy(dbEntities.Select(keySelector), keySelector).ToList();
 
             Create(entitiesToAdd);
 
-            var entitiesToUpdate = newEntities.Join(dbEntitiesQuery, keySelector.Compile(), keySelector.Compile(), (newEntity, dbEntity) => (newEntity, dbEntity))
-                .Where(s => s.dbEntity.Hash != s.newEntity.Hash)
+            var entitiesToUpdate = newEntities.Join(dbEntities, keySelector, keySelector, (newEntity, dbEntity) => (newEntity, dbEntity))
+                .Where(s => s.dbEntity != s.newEntity)
                 .ToList();
 
             foreach (var (newEntity, dbEntity) in entitiesToUpdate)
             {
-                Update(dbEntity, newEntity);
+                var dbProperties = GetPrimitiveProperties(dbEntity);
+                var newProperties = GetPrimitiveProperties(newEntity);
+
+                var propsTouUpdate = dbProperties.Join(newProperties, dbProperty => dbProperty.Name, newProperty => newProperty.Name, (dbProperty, newProperty) => (DbProperty: dbProperty, NewProperty: newProperty))
+                            .Where(group => !Attribute.IsDefined(group.DbProperty, typeof(IgnoreCompareAttribute)) && !Attribute.IsDefined(group.DbProperty, typeof(CompositeKeyAttribute)))
+                            .Select(group => (group.DbProperty, DbValue: group.DbProperty.GetValue(dbEntity), NewValue: group.NewProperty.GetValue(newEntity)))
+                            .Where(s => !object.Equals(s.DbValue, s.NewValue))
+                            .ToList();
+
+                propsTouUpdate.ForEach(group =>
+                {
+                    group.DbProperty.SetValue(dbEntity, group.NewValue);
+                });
+
+                if (propsTouUpdate.Count > 0)
+                {
+                    if (_dbContext.Entry(dbEntity).State == EntityState.Detached)
+                    {
+                        _dbSet.Attach(dbEntity);
+                    }
+
+                    _dbContext.Entry(dbEntity).State = EntityState.Modified;
+                }
             }
 
             if (deleteUnmatch)
             {
-                var entitiesToDelete = dbEntitiesQuery.ExceptBy(newEntities.Select(keySelector.Compile()), keySelector).ToList();
+                var entitiesToDelete = dbEntities.ExceptBy(newEntities.Select(keySelector), keySelector).ToList();
 
                 Delete(entitiesToDelete);
             }
@@ -192,7 +193,7 @@ namespace Sample.DB
             await _dbContext.SaveChangesAsync(ct);
 
             newEntities
-                .Join(dbEntitiesQuery, keySelector.Compile(), keySelector.Compile(), (newEntity, dbEntity) => new { NewEntity = newEntity, DbEntity = dbEntity })
+                .Join(dbEntities, keySelector, keySelector, (newEntity, dbEntity) => new { NewEntity = newEntity, DbEntity = dbEntity })
                 .ToList()
                .ForEach(group => group.NewEntity.Id = group.DbEntity.Id);
         }
@@ -212,65 +213,43 @@ namespace Sample.DB
             return hasValue.Any();
         }
 
-        private static Expression<Func<TEntity, object>> CreateKeySelector()
+        private static Func<TEntity, object> CreateKeySelector()
         {
-            var parameter = Expression.Parameter(typeof(TEntity), "s");
-
-            var members = typeof(TEntity)
+            var properties = typeof(TEntity)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(prop => Attribute.IsDefined(prop, typeof(CompositeKeyAttribute)))
                 .ToArray();
 
-            if (members.Length == 0)
+            if (properties.Length == 0)
             {
                 throw new InvalidOperationException("No properties marked with CompositeKeyAttribute found.");
             }
 
-            Type tupleType = Type.GetType($"System.ValueTuple`{members.Length}")!;
+            var parameter = Expression.Parameter(typeof(TEntity), "entity");
+            var tupleType = Type.GetType($"System.ValueTuple`{properties.Length}");
 
             if (tupleType == null)
             {
-                throw new InvalidOperationException($"Tuple type for arity {members.Length} could not be found.");
+                throw new InvalidOperationException($"ValueTuple type with {properties.Length} elements not found.");
             }
 
-            var genericArgs = members.Select(m => m.PropertyType).ToArray();
-            var constructedTupleType = tupleType.MakeGenericType(genericArgs);
+            var propertyTypes = properties.Select(p => p.PropertyType).ToArray();
+            var tupleConstructor = tupleType.MakeGenericType(propertyTypes).GetConstructor(propertyTypes);
 
-            var propertyExpressions = members.Select(m => Expression.Property(parameter, m)).ToArray();
-
-            var body = Expression.New(constructedTupleType.GetConstructor(genericArgs)!, propertyExpressions);
-
-            return Expression.Lambda<Func<TEntity, object>>(Expression.Convert(body, typeof(object)), parameter);
-        }
-
-        private int Update(TEntity dbEntity, TEntity newEntity)
-        {
-            var dbProperties = GetPrimitiveProperties(dbEntity);
-            var newProperties = GetPrimitiveProperties(newEntity);
-
-            var propsTouUpdate = dbProperties.Join(newProperties, dbProperty => dbProperty.Name, newProperty => newProperty.Name, (dbProperty, newProperty) => (DbProperty: dbProperty, NewProperty: newProperty))
-                        .Where(group => !Attribute.IsDefined(group.DbProperty, typeof(IgnoreCompareAttribute)) && !Attribute.IsDefined(group.DbProperty, typeof(CompositeKeyAttribute)))
-                        .Select(group => (group.DbProperty, DbValue: group.DbProperty.GetValue(dbEntity), NewValue: group.NewProperty.GetValue(newEntity)))
-                        .Where(s => !object.Equals(s.DbValue, s.NewValue))
-                        .ToList();
-
-            propsTouUpdate.ForEach(group =>
+            if (tupleConstructor == null)
             {
-                group.DbProperty.SetValue(dbEntity, group.NewValue);
-            });
-
-            if (propsTouUpdate.Count > 0)
-            {
-                if (_dbContext.Entry(dbEntity).State == EntityState.Detached)
-                {
-                    _dbSet.Attach(dbEntity);
-                }
-
-                _dbContext.Entry(dbEntity).State = EntityState.Modified;
+                throw new InvalidOperationException("Unable to find appropriate ValueTuple constructor.");
             }
 
-            return propsTouUpdate.Count;
+            var propertyAccesses = properties.Select(p => Expression.Property(parameter, p));
+            var tupleCreation = Expression.New(tupleConstructor, propertyAccesses);
+
+            return Expression.Lambda<Func<TEntity, object>>(
+                Expression.Convert(tupleCreation, typeof(object)),
+                parameter
+            ).Compile();
         }
+
 
         private IEnumerable<PropertyInfo> GetPrimitiveProperties(TEntity dbEntity)
         {
@@ -281,48 +260,5 @@ namespace Sample.DB
             return primitiveProps;
         }
 
-        private static bool IsNavigationProperty(PropertyInfo property)
-        {
-            // Check if the type is a primitive or value type (not a navigation property)
-            if (property.PropertyType.IsPrimitive || property.PropertyType.IsValueType || property.PropertyType == typeof(string))
-            {
-                return false;
-            }
-
-            // Check if it's a collection (which is likely a navigation property)
-            if (typeof(IEnumerable).IsAssignableFrom(property.PropertyType) && property.PropertyType != typeof(string))
-            {
-                return true;
-            }
-
-            // Check if it's a class (which might be a navigation property)
-            if (property.PropertyType.IsClass && property.PropertyType != typeof(string))
-            {
-                return true;
-            }
-
-            return false;
-        }
-
-        private static string GetHash(object input)
-        {
-            var result = input.GetType()
-               .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-               .Where(s => s.CanRead && !IsNavigationProperty(s) && !Attribute.IsDefined(s, typeof(IgnoreCompareAttribute)) && s.Name != nameof(DbEntity.Hash))
-               .ToDictionary(kvp => kvp.Name, kvp => kvp.GetValue(input));
-
-            var json = JsonSerializer.Serialize(result);
-
-            byte[] hashBytes = MD5.HashData(Encoding.UTF8.GetBytes(json));
-
-            StringBuilder sb = new();
-
-            foreach (byte b in hashBytes)
-            {
-                sb.Append(b.ToString("x2"));
-            }
-
-            return sb.ToString();
-        }
     }
 }

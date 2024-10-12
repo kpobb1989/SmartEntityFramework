@@ -21,7 +21,7 @@ namespace Sample.DB.Interfaces
           bool asNoTracking = true,
           CancellationToken ct = default);
 
-        Task RefreshAsync(
+        Task RefreshAndSaveChangesAsync(
             IEnumerable<TEntity> newEntities,
             bool deleteUnmatch = false,
             CancellationToken ct = default);

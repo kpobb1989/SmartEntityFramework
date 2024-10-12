@@ -8,7 +8,7 @@ using System.Text.Json;
 
 namespace Sample.Funcs
 {
-    public class SampleSyncUp(IUnitOfWork unitOfWork)
+    public class SampleRefresh(IUnitOfWork unitOfWork)
     {
         [Function("SampleSyncUpTimerTrigger")]
         public async Task RunTimerTrigger([TimerTrigger("0 */5 * * * *", RunOnStartup = true)] CancellationToken ct)
@@ -17,12 +17,12 @@ namespace Sample.Funcs
 [
     {
         ""name"": ""Chevron"",
-        ""address"": ""6001 Bollinger Canyon Rd, Suite G, San Ramon, CA"",
+        ""address"": ""6001s Bollinger Canyon Rd, Suite G, San Ramon, CA"",
         ""zip"": 94583,
         ""employees"": [
             {
                 ""email"": ""vyasyapupkin@chevron.com"",
-                ""firstName"": ""Vyasya1"",
+                ""firstName"": ""Vyasya"",
                 ""lastName"": ""Pupkin""
             },
             {
@@ -74,7 +74,7 @@ namespace Sample.Funcs
                 return company;
             }).ToList();
 
-            await unitOfWork.Repository<CompanyEntity>().RefreshAsync(dbCompanies, ct: ct);
+            await unitOfWork.Repository<CompanyEntity>().RefreshAndSaveChangesAsync(dbCompanies, ct: ct);
 
             //var dbEmployees = dtoCompanies.SelectMany(c => c.Employees!, (company, employee) => new EmployeeEntity
             //{
