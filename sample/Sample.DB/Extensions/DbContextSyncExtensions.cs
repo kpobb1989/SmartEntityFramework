@@ -2,56 +2,67 @@
 using Microsoft.Extensions.Logging;
 using Sample.DB.Comparers;
 using Sample.DB.Entities;
-using Sample.DB.Options;
 using Sample.DB.SyncUp;
 using System.Linq.Expressions;
 
 namespace Sample.DB.Extensions;
 
+/// <summary>
+/// Provides extension methods for synchronizing collections of entities with the database context.
+/// </summary>
 public static class DbContextSyncExtensions
 {
+    private static readonly int BatchSize = 1000;
+
     /// <summary>
-    /// Syncs external data to the DB. Uses custom bulk methods and logs everything.
+    /// Synchronizes a collection of new entities with the database. Inserts new entities, updates existing ones, and optionally deletes entities not present in the new collection.
     /// </summary>
+    /// <typeparam name="TEntity">The type of the entity.</typeparam>
+    /// <typeparam name="TKey">The type of the key used to identify entities.</typeparam>
+    /// <param name="context">The database context.</param>
+    /// <param name="newEntities">The collection of new entities to synchronize.</param>
+    /// <param name="keySelector">An expression selecting the key property or properties for identifying entities.</param>
+    /// <param name="fullSync">If true, entities not present in <paramref name="newEntities"/> will be deleted from the database.</param>
+    /// <param name="logger">Optional logger for logging sync operations.</param>
+    /// <param name="ct">Optional cancellation token.</param>
+    /// <returns>A <see cref="SyncUpResult"/> containing counts of inserted, updated, deleted, and total processed entities.</returns>
     public static async Task<SyncUpResult> SyncUpAsync<TEntity, TKey>(
         this DbContext context,
         ICollection<TEntity> newEntities,
         Expression<Func<TEntity, TKey>> keySelector,
-        SyncUpOptions? options = null,
+        bool fullSync = true,
+        ILogger? logger = null,
         CancellationToken ct = default
     ) where TEntity : DbEntity, new()
     {
-        options ??= new SyncUpOptions();
-        options.Logger ??= context.GetDefaultLogger();
+        logger ??= context.GetDefaultLogger();
 
         var dbSet = context.Set<TEntity>();
         var keyFunc = keySelector.Compile();
         var comparer = new DbEntityComparer<TEntity, TKey>(keySelector);
 
+        var predicate = BuildKeyPredicate(keySelector, newEntities);
+
         var syncUpResult = new SyncUpResult();
 
-        foreach (var chunk in newEntities.Chunk(options.BatchSize))
+        foreach (var chunk in newEntities.Chunk(BatchSize))
         {
-            var predicate = BuildKeyPredicate(keySelector, chunk);
-
             var dbEntities = await dbSet.Where(predicate).ToListAsync(ct);
 
-            var joinResults = chunk.GroupJoin(
+            var group = chunk.GroupJoin(
                 dbEntities,
                 newEntity => keyFunc(newEntity),
                 dbEntity => keyFunc(dbEntity),
                 (newEntity, dbGroup) => new
                 {
                     NewEntity = newEntity,
-                    DbEntity = dbGroup
-                        .DefaultIfEmpty()
-                        .FirstOrDefault(dbEntity => dbEntity != null && keyFunc(dbEntity) != null)
+                    DbEntity = dbGroup.FirstOrDefault()
                 });
 
             var toInsert = new List<TEntity>();
             var toUpdate = new List<TEntity>();
 
-            foreach (var pair in joinResults)
+            foreach (var pair in group)
             {
                 if (pair.DbEntity == null)
                 {
@@ -70,27 +81,24 @@ public static class DbContextSyncExtensions
 
             if (toInsert.Count != 0)
             {
-                await context.BulkInsertAsync(toInsert, options.BatchSize, ct: ct);
-                options.Logger?.LogInformation("Bulk inserted {ToInsertCount} {Name} records.", toInsert.Count,
+                await context.BulkInsertAsync(toInsert, BatchSize, ct: ct);
+                logger?.LogInformation("Bulk inserted {ToInsertCount} {Name} records.", toInsert.Count,
                     typeof(TEntity).Name);
             }
 
             if (toUpdate.Count != 0)
             {
-                await context.BulkUpdateAsync(toUpdate, options.BatchSize, ct: ct);
-                options.Logger?.LogInformation("Bulk updated {ToUpdateCount} {Name} records.", toUpdate.Count,
+                await context.BulkUpdateAsync(toUpdate, BatchSize, ct: ct);
+                logger?.LogInformation("Bulk updated {ToUpdateCount} {Name} records.", toUpdate.Count,
                     typeof(TEntity).Name);
             }
 
             syncUpResult.Total += chunk.Count();
-            options.Logger?.LogInformation("Processed {Total} {Name}", syncUpResult.Total, typeof(TEntity).Name);
+            logger?.LogInformation("Processed {Total} {Name}", syncUpResult.Total, typeof(TEntity).Name);
         }
 
-        // Deletes after all batches
-        if (options.FullSync)
+        if (fullSync)
         {
-            var predicate = BuildKeyPredicate(keySelector, newEntities);
-
             List<int> toDelete = await dbSet
                 .Where(Expression.Lambda<Func<TEntity, bool>>(Expression.Not(predicate.Body), predicate.Parameters))
                 .Select(s => s.Id)
@@ -100,24 +108,21 @@ public static class DbContextSyncExtensions
             {
                 syncUpResult.Deleted = await context.BulkDeleteAsync<TEntity, int>(
                     toDelete,
-                    options.BatchSize,
+                    BatchSize,
                     ct: ct);
 
-                options.Logger?.LogInformation("Bulk deleted {Count} {Name} records.", syncUpResult.Deleted,
+                logger?.LogInformation("Bulk deleted {Count} {Name} records.", syncUpResult.Deleted,
                     typeof(TEntity).Name);
             }
             else
             {
-                options.Logger?.LogInformation("No records to delete for {Name}.", typeof(TEntity).Name);
+                logger?.LogInformation("No records to delete for {Name}.", typeof(TEntity).Name);
             }
         }
 
-        var keyPropertyNames = GetPropertyNamesFromExpression(keySelector);
-        var predicate2 = BuildKeyPredicate(keySelector, newEntities);
-
         // Build a projection for key(s) and Id
         var dbKeyIdPairs = await dbSet
-            .Where(predicate2)
+            .Where(predicate)
             .Select(e => new { Key = keyFunc(e), e.Id })
             .ToListAsync(ct);
 
@@ -133,12 +138,20 @@ public static class DbContextSyncExtensions
             context.Entry(newEntity).State = EntityState.Detached;
         }
 
-        options.Logger?.LogInformation("Sync complete: Inserted {Inserted}, Updated {Updated}, Deleted {Deleted}",
+        logger?.LogInformation("Sync complete: Inserted {Inserted}, Updated {Updated}, Deleted {Deleted}",
             syncUpResult.Inserted, syncUpResult.Updated, syncUpResult.Deleted);
 
         return syncUpResult;
     }
 
+    /// <summary>
+    /// Extracts property names from a key selector expression.
+    /// </summary>
+    /// <typeparam name="TEntity">The type of the entity.</typeparam>
+    /// <typeparam name="TKey">The type of the key.</typeparam>
+    /// <param name="keySelector">The key selector expression.</param>
+    /// <returns>A read-only list of property names used in the key selector.</returns>
+    /// <exception cref="ArgumentException">Thrown if the expression is not a simple property or anonymous type.</exception>
     private static IReadOnlyList<string> GetPropertyNamesFromExpression<TEntity, TKey>(Expression<Func<TEntity, TKey>> keySelector)
     {
         if (keySelector.Body is MemberExpression memberExpr)
@@ -150,6 +163,14 @@ public static class DbContextSyncExtensions
         throw new ArgumentException("Only simple property or anonymous type expressions are supported");
     }
 
+    /// <summary>
+    /// Builds a predicate expression for filtering entities by their key values.
+    /// </summary>
+    /// <typeparam name="TEntity">The type of the entity.</typeparam>
+    /// <typeparam name="TKey">The type of the key.</typeparam>
+    /// <param name="keySelector">The key selector expression.</param>
+    /// <param name="entities">The collection of entities to extract key values from.</param>
+    /// <returns>An expression that can be used to filter entities by their key values.</returns>
     private static Expression<Func<TEntity, bool>> BuildKeyPredicate<TEntity, TKey>(
         Expression<Func<TEntity, TKey>> keySelector,
         IEnumerable<TEntity> entities)

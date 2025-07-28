@@ -1,9 +1,9 @@
-using System.Text.Json;
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.Extensions.Logging;
 using Sample.DB;
 using Sample.DB.Entities;
 using Sample.DB.Extensions;
-using Sample.DB.Options;
+using System.Text.Json;
 
 namespace Sample.Funcs
 {
@@ -20,10 +20,10 @@ namespace Sample.Funcs
         ""email"": ""joanne.rowling@example.com"",
         ""books"": [
             {
-                ""title"": ""Harry Potter and the Philosopher's Stone1""
+                ""title"": ""Harry Potter and the Philosopher's Stone""
             },
             {
-                ""title"": ""Harry Potter and the Chamber of Secrets2""
+                ""title"": ""Harry Potter and the Chamber of Secrets""
             }
         ]
     },
@@ -46,15 +46,12 @@ namespace Sample.Funcs
                                  new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                              ?? Enumerable.Empty<AuthorDto>();
 
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(ct);
+            await using  var transaction = await dbContext.Database.BeginTransactionAsync(ct);
+
+            var logger = context.GetLogger<SampleRefresh>();
 
             try
             {
-                var syncUpOptions = new SyncUpOptions()
-                {
-                    Logger = context.GetLogger<SampleRefresh>()
-                };
-
                 // Sync Authors
                 var authors = dtoAuthors.Select(authorDto => new AuthorEntity
                 {
@@ -66,21 +63,23 @@ namespace Sample.Funcs
                         Title = bookDto.Title
                     }).ToList() ?? []
                 }).ToList();
-                await dbContext.SyncUpAsync(authors, a => a.Email, syncUpOptions, ct: ct);
+                await dbContext.SyncUpAsync(authors, a => a.Email, logger: logger, ct: ct);
 
                 // Sync Books
                 var books = authors.SelectMany(a => a.Books).ToList();
-                await dbContext.SyncUpAsync(books, b => b.Title, syncUpOptions, ct: ct);
+                await dbContext.SyncUpAsync(books, b => b.Title, logger: logger, ct: ct);
 
                 // Sync AuthorBooks
                 var authorBooks = authors.SelectMany(a => a.Books, (a, b) => new AuthorBookEntity() { AuthorId = a.Id, BookId = b.Id }).ToList();
-                await dbContext.SyncUpAsync(authorBooks, ab => new { ab.AuthorId, ab.BookId }, syncUpOptions, ct: ct);
+                await dbContext.SyncUpAsync(authorBooks, ab => new { ab.AuthorId, ab.BookId }, logger: logger, ct: ct);
 
                 await transaction.CommitAsync(ct);
             }
             catch (Exception ex)
             {
-                transaction.Rollback();
+                await transaction.RollbackAsync(ct);
+
+                logger.LogError(ex, "An error occurred while syncing data. Rollback changes.");
             }
         }
 
