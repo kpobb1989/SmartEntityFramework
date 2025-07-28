@@ -14,12 +14,12 @@ namespace Sample.DB
         [DebuggerStepThrough]
         protected override void OnModelCreating(ModelBuilder builder)
         {
-            // Unique indx for Title
+            // Unique index for Title
             builder.Entity<BookEntity>()
                 .HasIndex(s => s.Title)
                 .IsUnique();
 
-            // Unique indx for Email
+            // Unique index for Email
             builder.Entity<AuthorEntity>()
                 .HasIndex(s => s.Email)
                 .IsUnique();
