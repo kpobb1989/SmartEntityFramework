@@ -7,10 +7,10 @@ using System.Text.Json;
 
 namespace Sample.Funcs
 {
-    public class SampleRefresh(SampleDbContext dbContext)
+    public class SampleRefresh(SampleDbContext dbContext, ILogger<SampleRefresh> logger)
     {
         [Function(nameof(SampleRefresh_HttpTrigger))]
-        public async Task SampleRefresh_HttpTrigger([HttpTrigger(AuthorizationLevel.Function, "get")] FunctionContext context, CancellationToken ct)
+        public async Task SampleRefresh_HttpTrigger([HttpTrigger(AuthorizationLevel.Function, "get")] CancellationToken ct)
         {
             var json = @"
 [
@@ -46,9 +46,7 @@ namespace Sample.Funcs
                                  new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                              ?? Enumerable.Empty<AuthorDto>();
 
-            await using  var transaction = await dbContext.Database.BeginTransactionAsync(ct);
-
-            var logger = context.GetLogger<SampleRefresh>();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(ct);
 
             try
             {
