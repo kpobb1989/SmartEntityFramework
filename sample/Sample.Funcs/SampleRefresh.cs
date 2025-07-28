@@ -1,105 +1,102 @@
-using Microsoft.Azure.Functions.Worker;
-
-using Sample.DB.Entities;
-using Sample.DB.Interfaces;
-
 using System.Text.Json;
-
+using Microsoft.Azure.Functions.Worker;
+using Sample.DB;
+using Sample.DB.Entities;
+using Sample.DB.Extensions;
+using Sample.DB.Options;
 
 namespace Sample.Funcs
 {
-    public class SampleRefresh(IUnitOfWork unitOfWork)
+    public class SampleRefresh(SampleDbContext dbContext)
     {
-        [Function("SampleSyncUpTimerTrigger")]
-        public async Task RunTimerTrigger([TimerTrigger("0 */5 * * * *", RunOnStartup = true)] CancellationToken ct)
+        [Function(nameof(SampleRefresh_HttpTrigger))]
+        public async Task SampleRefresh_HttpTrigger([HttpTrigger(AuthorizationLevel.Function, "get")] FunctionContext context, CancellationToken ct)
         {
             var json = @"
 [
     {
-        ""name"": ""Chevron"",
-        ""address"": ""6001s Bollinger Canyon Rd, Suite G, San Ramon, CA"",
-        ""zip"": 94583,
-        ""employees"": [
+        ""firstName"": ""Joanne1"",
+        ""lastName"": ""Rowling"",
+        ""email"": ""joanne.rowling@example.com"",
+        ""books"": [
             {
-                ""email"": ""vyasyapupkin@chevron.com"",
-                ""firstName"": ""Vyasya"",
-                ""lastName"": ""Pupkin""
+                ""title"": ""Harry Potter and the Philosopher's Stone1""
             },
             {
-                ""email"": ""mattereza@chevron.com"",
-                ""firstName"": ""Mat"",
-                ""lastName"": ""Tereza""
+                ""title"": ""Harry Potter and the Chamber of Secrets2""
             }
         ]
     },
     {
-        ""name"": ""Netflix"",
-        ""address"": ""121 Albright Way, Los Gatos, CA"",
-        ""zip"": 94000,
-        ""employees"": [
-{
-                ""email"": ""vlad@netflix.com"",
-                ""firstName"": ""Vlad"",
-                ""lastName"": ""Kushnir""
-            }]
+        ""firstName"": ""J.R.R."",
+        ""lastName"": ""Tolkien"",
+        ""email"": ""tolkien@example.com"",
+        ""books"": [
+            {
+                ""title"": ""The Hobbit""
+            },
+            {
+                ""title"": ""The Lord of the Rings""
+            }
+        ]
     }
 ]";
 
+            var dtoAuthors = JsonSerializer.Deserialize<AuthorDto[]>(json,
+                                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                             ?? Enumerable.Empty<AuthorDto>();
 
-            // unitOfWork.Repository<CompanyEntity>().Delete();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(ct);
 
-            // await unitOfWork.SaveChangesAsync(ct);
-
-            var dtoCompanies = JsonSerializer.Deserialize<CompanyDto[]>(json, new JsonSerializerOptions()
+            try
             {
-                PropertyNameCaseInsensitive = true
-            }) ?? Enumerable.Empty<CompanyDto>();
-
-            var dbCompanies = dtoCompanies.Select(dto =>
-            {
-                var company = new CompanyEntity
+                var syncUpOptions = new SyncUpOptions()
                 {
-                    Name = dto.Name,
-                    Address = dto.Address,
-                    Zip = dto.Zip,
-
-                    //Employees = dto.Employees?.Select(employee => new EmployeeEntity
-                    //{
-                    //    Email = employee.Email,
-                    //    FirstName = employee.FirstName,
-                    //    LastName = employee.LastName,
-                    //}).ToList()
+                    Logger = context.GetLogger<SampleRefresh>()
                 };
 
-                return company;
-            }).ToList();
+                // Sync Authors
+                var authors = dtoAuthors.Select(authorDto => new AuthorEntity
+                {
+                    FirstName = authorDto.FirstName,
+                    LastName = authorDto.LastName,
+                    Email = authorDto.Email,
+                    Books = authorDto.Books?.Select(bookDto => new BookEntity
+                    {
+                        Title = bookDto.Title
+                    }).ToList() ?? []
+                }).ToList();
+                await dbContext.SyncUpAsync(authors, a => a.Email, syncUpOptions, ct: ct);
 
-            await unitOfWork.Repository<CompanyEntity>().RefreshAndSaveChangesAsync(dbCompanies, ct: ct);
+                // Sync Books
+                var books = authors.SelectMany(a => a.Books).ToList();
+                await dbContext.SyncUpAsync(books, b => b.Title, syncUpOptions, ct: ct);
 
-            //var dbEmployees = dtoCompanies.SelectMany(c => c.Employees!, (company, employee) => new EmployeeEntity
-            //{
-            //    Email = employee.Email,
-            //    FirstName = employee.FirstName,
-            //    LastName = employee.LastName,
-            //    CompanyId = dbCompanies.First(c => c.Name == company.Name).Id,
-            //}).ToList();
+                // Sync AuthorBooks
+                var authorBooks = authors.SelectMany(a => a.Books, (a, b) => new AuthorBookEntity() { AuthorId = a.Id, BookId = b.Id }).ToList();
+                await dbContext.SyncUpAsync(authorBooks, ab => new { ab.AuthorId, ab.BookId }, syncUpOptions, ct: ct);
 
-            //await unitOfWork.Repository<EmployeeEntity>().RefreshAsync(dbEmployees, ct: ct);
+                await transaction.CommitAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                transaction.Rollback();
+            }
         }
 
-        public record CompanyDto
-        {
-            public string? Name { get; set; }
-            public string? Address { get; set; }
-            public int? Zip { get; set; }
-            public EmployeeDto[]? Employees { get; set; } = [];
-        }
 
-        public record EmployeeDto
+        // DTO definitions
+        record AuthorDto
         {
-            public string? Email { get; set; }
             public string? FirstName { get; set; }
             public string? LastName { get; set; }
+            public string? Email { get; set; }
+            public BookDto[]? Books { get; set; } = [];
+        }
+
+        record BookDto
+        {
+            public string? Title { get; set; }
         }
     }
 }

@@ -1,99 +1,66 @@
-﻿using Sample.DB.Attributes;
-
-using System.Reflection;
+﻿using Microsoft.EntityFrameworkCore;
 using System.Collections;
-using System.Diagnostics;
+using System.ComponentModel.DataAnnotations;
+using System.Reflection;
 
 namespace Sample.DB.Entities
 {
-    public class DbEntity: IEquatable<DbEntity>
+    public abstract class DbEntity
     {
-        [IgnoreCompare]
         public int Id { get; set; }
-
-        [DebuggerStepThrough]
-        public override bool Equals(object? obj)
+        
+        public void CopyScalarFieldsFrom(DbEntity source, bool copyId = false)
         {
-            return this.Equals(obj as DbEntity);
-        }
-
-        [DebuggerStepThrough]
-        public bool Equals(DbEntity? other)
-        {
-            if (other is null)
-                return false;
-
-            if (ReferenceEquals(this, other))
-                return true;
-
-            var properties = GetType()
-                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(p => p.CanRead && !IsNavigationProperty(p) && !Attribute.IsDefined(p, typeof(IgnoreCompareAttribute)));
-
-            return properties.All(p => object.Equals(p.GetValue(this), p.GetValue(other)));
-        }
-
-
-        [DebuggerStepThrough]
-        public static bool operator ==(DbEntity left, DbEntity right)
-        {
-            if (ReferenceEquals(left, null))
-                return ReferenceEquals(right, null);
-
-            return left.Equals(right);
-        }
-
-
-        [DebuggerStepThrough]
-        public static bool operator !=(DbEntity left, DbEntity right)
-        {
-            return !(left == right);
-        }
-
-        [DebuggerStepThrough]
-        public override int GetHashCode()
-        {
-            unchecked
+            foreach (var prop in source.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public))
             {
-                int hash = 17;
-                var properties = GetType()
-                    .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                    .Where(p => p.CanRead && !IsNavigationProperty(p) && !Attribute.IsDefined(p, typeof(IgnoreCompareAttribute)));
+                if (!prop.CanRead || !prop.CanWrite) continue;
+                if (!copyId && prop.Name == nameof(Id)) continue;
+                if (IsCollectionOrNavigation(prop)) continue;
+                prop.SetValue(this, prop.GetValue(source));
+            }
+        }
 
-                foreach (var prop in properties)
+        public void ClearNavigationProperties()
+        {
+            foreach (var prop in GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public))
+            {
+                if (!prop.CanWrite) continue;
+                if (IsCollectionOrNavigation(prop))
                 {
-                    var value = prop.GetValue(this);
-                    if (value != null)
+                    if (typeof(IEnumerable).IsAssignableFrom(prop.PropertyType) && prop.PropertyType != typeof(string))
                     {
-                        hash = hash * 31 + value.GetHashCode();
+                        // For collections, set to empty array or list if possible
+                        if (prop.PropertyType.IsArray)
+                        {
+                            prop.SetValue(this, Array.CreateInstance(prop.PropertyType.GetElementType()!, 0));
+                        }
+                        else if (prop.PropertyType.GetConstructor(Type.EmptyTypes) != null)
+                        {
+                            prop.SetValue(this, Activator.CreateInstance(prop.PropertyType));
+                        }
+                        else
+                        {
+                            prop.SetValue(this, null);
+                        }
+                    }
+                    else
+                    {
+                        // For navigation properties, set to null
+                        prop.SetValue(this, null);
                     }
                 }
-
-                return hash;
             }
         }
 
-        private static bool IsNavigationProperty(PropertyInfo property)
+        private static bool IsCollectionOrNavigation(PropertyInfo prop)
         {
-            // Check if the type is a primitive or value type (not a navigation property)
-            if (property.PropertyType.IsPrimitive || property.PropertyType.IsValueType || property.PropertyType == typeof(string))
-            {
+            if (prop.PropertyType == typeof(string))
                 return false;
-            }
-
-            // Check if it's a collection (which is likely a navigation property)
-            if (typeof(IEnumerable).IsAssignableFrom(property.PropertyType) && property.PropertyType != typeof(string))
-            {
+            if (typeof(IEnumerable).IsAssignableFrom(prop.PropertyType))
                 return true;
-            }
-
-            // Check if it's a class (which might be a navigation property)
-            if (property.PropertyType.IsClass && property.PropertyType != typeof(string))
-            {
-                return true;
-            }
-
-            return false;
+            var type = prop.PropertyType;
+            
+            return type.IsClass && type != typeof(string);
         }
     }
 }

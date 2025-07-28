@@ -4,7 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Sample.DB;
 using Microsoft.Extensions.Configuration;
 using Sample.Funcs;
-using Sample.DB.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
@@ -14,13 +14,20 @@ var host = new HostBuilder()
         services.ConfigureFunctionsApplicationInsights();
 
         // DB
-        services.AddDbContext<SampleDbContext>();
-        services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddDbContext<SampleDbContext>(options => options.UseSqlServer(AppSettings.DbConnectionString));
+        //    services.AddScoped<IUnitOfWork, UnitOfWork>();
     })
     .Build();
 
 var configuration = host.Services.GetRequiredService<IConfiguration>();
 
 AppSettings.Setup(configuration);
+
+// Ensure DB is created and migrations are applied
+using (var scope = host.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<SampleDbContext>();
+    dbContext.Database.Migrate();
+}
 
 host.Run();
